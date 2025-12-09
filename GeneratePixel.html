@@ -1663,10 +1663,6 @@
                         btn.innerText = "🚀 开始生成图片";
                         // --- 新增：调用播放声音函数 ---
                         playCompletionSound();
-
-                        // --- 播放完成后隐藏 AOD 按钮和 URL 显示 ---
-                        document.getElementById('aodBtn').style.display = 'none';
-                        document.getElementById('imageUrlDisplay').style.display = 'none';
                     };
                     resultImg.onerror = () => {
                         log("❌ 图片加载失败", 'error');
