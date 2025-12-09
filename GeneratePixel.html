@@ -24,6 +24,15 @@
             --border-color: #ddd;
         }
 
+        /* 防止移动端左右滑动，锁定视口 */
+        html {
+            overflow-x: hidden;
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            overscroll-behavior-x: none;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--bg-color);
@@ -34,6 +43,11 @@
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
+            width: 100%;
+            overflow-x: hidden;
+            overflow-y: auto;
+            overscroll-behavior-x: none;
+            -webkit-overflow-scrolling: touch;
         }
 
         .container {
@@ -769,6 +783,20 @@
             🌙 AOD 息屏模式
         </button>
 
+        <!-- 图片URL显示区域 -->
+        <div id="imageUrlDisplay" style="display:none; margin-top:10px; width:100%;">
+            <label style="font-weight:600; font-size:0.9em; color:#555; display:block; margin-bottom:8px;">🔗 生成图片
+                URL</label>
+            <div
+                style="background:#f8f9fa; border:1px solid var(--border-color); border-radius:6px; padding:10px; word-break:break-all; font-size:12px; font-family:monospace; color:#333;">
+                <a id="imageUrlLink" href="" target="_blank"
+                    style="color:var(--primary-color); text-decoration:none;"></a>
+            </div>
+            <button onclick="copyImageUrl()"
+                style="margin-top:8px; padding:8px 16px; font-size:14px; width:auto; background:#6c757d;">📋
+                复制链接</button>
+        </div>
+
         <div class="result-area">
             <div class="input-group">
                 <label>运行日志</label>
@@ -923,6 +951,43 @@
             localStorage.setItem(CONFIG_KEYS.API_KEY, document.getElementById('apiKey').value);
             localStorage.setItem(CONFIG_KEYS.MODEL, document.getElementById('modelName').value);
             localStorage.setItem(CONFIG_KEYS.PROMPT, document.getElementById('prompt').value);
+        }
+
+        // --- 图片URL显示相关 ---
+        let currentGeneratedImageUrl = null;
+
+        function displayImageUrl(url) {
+            currentGeneratedImageUrl = url;
+            const urlDisplay = document.getElementById('imageUrlDisplay');
+            const urlLink = document.getElementById('imageUrlLink');
+
+            urlLink.href = url;
+            urlLink.textContent = url;
+            urlDisplay.style.display = 'block';
+
+            log("图片URL已显示在AOD按钮下方");
+        }
+
+        function copyImageUrl() {
+            if (!currentGeneratedImageUrl) {
+                log("没有可复制的URL", 'warn');
+                return;
+            }
+
+            navigator.clipboard.writeText(currentGeneratedImageUrl).then(() => {
+                log("✅ URL已复制到剪贴板", 'success');
+                // 提供视觉反馈
+                const btn = event.target;
+                const originalText = btn.innerText;
+                btn.innerText = '✅ 已复制!';
+                btn.style.background = '#2ecc71';
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.background = '#6c757d';
+                }, 1500);
+            }).catch(err => {
+                log("复制失败: " + err.message, 'error');
+            });
         }
 
         // --- 2. 多图处理逻辑 ---
@@ -1575,6 +1640,8 @@
 
                 if (finalImageUrl) {
                     log("获取图片 URL，渲染中...");
+                    // 显示图片URL
+                    displayImageUrl(finalImageUrl);
                     resultImg.src = finalImageUrl;
                     resultImg.onload = () => {
                         log("✅ 图片生成成功", 'success');
