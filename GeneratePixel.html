@@ -835,10 +835,10 @@
         /* AOD 模式样式 */
         .aod-overlay {
             position: fixed;
-            top: -100px;
-            left: -100px;
-            right: -100px;
-            bottom: -100px;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             background-color: #000000;
             z-index: 9999;
             display: flex;
@@ -849,6 +849,10 @@
             overflow: hidden;
             cursor: pointer;
             box-sizing: border-box;
+            padding-top: env(safe-area-inset-top, 0px);
+            padding-left: env(safe-area-inset-left, 0px);
+            padding-right: env(safe-area-inset-right, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px);
         }
 
         .aod-text-block {
@@ -884,7 +888,7 @@
     <link rel="icon" href="icon.PNG" type="image/png">
     <link rel="apple-touch-icon" href="icon.PNG">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#4a90e2">
     <link rel="manifest" href="manifest.json">
 </head>
@@ -1869,10 +1873,12 @@
 
         function startDVDAnimation(element) {
             const rect = element.getBoundingClientRect();
+            const parent = element.parentElement;
+            const parentRect = parent.getBoundingClientRect();
 
-            // 初始位置随机
-            let x = Math.random() * (window.innerWidth - rect.width);
-            let y = Math.random() * (window.innerHeight - rect.height);
+            // 初始位置随机（在父容器内）
+            let x = Math.random() * (parentRect.width - rect.width);
+            let y = Math.random() * (parentRect.height - rect.height);
 
             // 初始速度方向随机，速度较慢
             let angle = Math.random() * Math.PI * 2;
@@ -1897,8 +1903,8 @@
                     x = 0;
                     vx = Math.abs(vx); // 反弹，保持速度大小
                     bounced = true;
-                } else if (x + rect.width >= window.innerWidth) {
-                    x = window.innerWidth - rect.width;
+                } else if (x + rect.width >= parentRect.width) {
+                    x = parentRect.width - rect.width;
                     vx = -Math.abs(vx);
                     bounced = true;
                 }
@@ -1907,8 +1913,8 @@
                     y = 0;
                     vy = Math.abs(vy);
                     bounced = true;
-                } else if (y + rect.height >= window.innerHeight) {
-                    y = window.innerHeight - rect.height;
+                } else if (y + rect.height >= parentRect.height) {
+                    y = parentRect.height - rect.height;
                     vy = -Math.abs(vy);
                     bounced = true;
                 }
