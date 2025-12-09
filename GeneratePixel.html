@@ -1643,6 +1643,14 @@
 
                 if (finalImageUrl) {
                     log("获取图片 URL，渲染中...");
+
+                    // --- 强制关闭循环视频 ---
+                    const aodContainer = document.getElementById('aodContainer');
+                    if (aodContainer && aodContainer.style.display !== 'none') {
+                        exitAODMode();
+                    }
+                    // -----------------------
+
                     // 显示图片URL
                     displayImageUrl(finalImageUrl);
                     resultImg.src = finalImageUrl;
@@ -1655,12 +1663,10 @@
                         btn.innerText = "🚀 开始生成图片";
                         // --- 新增：调用播放声音函数 ---
                         playCompletionSound();
-                        // --- 生成成功后自动退出AOD模式 ---
-                        const aodContainer = document.getElementById('aodContainer');
-                        if (aodContainer && aodContainer.style.display !== 'none') {
-                            exitAODMode();
-                        }
-                        // -------------------------
+
+                        // --- 播放完成后隐藏 AOD 按钮和 URL 显示 ---
+                        document.getElementById('aodBtn').style.display = 'none';
+                        document.getElementById('imageUrlDisplay').style.display = 'none';
                     };
                     resultImg.onerror = () => {
                         log("❌ 图片加载失败", 'error');
