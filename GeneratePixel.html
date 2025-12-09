@@ -5,6 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI 图像生成器 Pro (多图版)</title>
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4a90e2">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="AI图像生成">
+    <link rel="apple-touch-icon" href="icon.png">
     <style>
         :root {
             --primary-color: #4a90e2;
@@ -655,6 +662,81 @@
                 grid-column: span 1;
             }
         }
+
+        /* AOD Mode Styles */
+        .aod-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 2000;
+            overflow: hidden;
+        }
+
+        .aod-overlay.active {
+            display: block;
+        }
+
+        .aod-dvd-box {
+            position: absolute;
+            padding: 20px 30px;
+            border-radius: 16px;
+            border: 3px solid #4ecdc4;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            font-family: 'Consolas', 'Monaco', monospace;
+            box-shadow: 0 0 30px rgba(78, 205, 196, 0.3);
+        }
+
+        .aod-timer {
+            font-size: 56px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #4ecdc4;
+            text-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
+        }
+
+        .aod-log {
+            font-size: 14px;
+            max-width: 320px;
+            word-wrap: break-word;
+            opacity: 0.85;
+            line-height: 1.4;
+        }
+
+        .aod-close-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 2001;
+            transition: all 0.3s;
+        }
+
+        .aod-close-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: scale(1.1);
+        }
+
+        .aod-btn {
+            background: linear-gradient(135deg, #1a1a2e, #16213e) !important;
+            border: 1px solid #444 !important;
+            margin-left: 10px !important;
+        }
+
+        .aod-btn:hover {
+            background: linear-gradient(135deg, #16213e, #0f3460) !important;
+        }
     </style>
 </head>
 
@@ -704,6 +786,9 @@
         </div>
 
         <button id="generateBtn" onclick="generateImage()">🚀 开始生成图片</button>
+        <button id="aodBtn" class="action-btn aod-btn" onclick="toggleAODMode()" style="display:none;">
+            🌙 AOD 息屏模式
+        </button>
 
         <div class="result-area">
             <div class="input-group">
@@ -723,6 +808,15 @@
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- AOD Mode Overlay -->
+    <div class="aod-overlay" id="aodOverlay">
+        <button class="aod-close-btn" onclick="exitAODMode()">×</button>
+        <div class="aod-dvd-box" id="aodDvdBox">
+            <div class="aod-timer" id="aodTimer">00:00:00</div>
+            <div class="aod-log" id="aodLog">等待日志...</div>
         </div>
     </div>
 
@@ -1374,11 +1468,16 @@
 
 
         // --- 3. 核心请求逻辑 (支持多模态) ---
+        let lastLogMessage = ''; // 为 AOD 模式保存最新日志
+
         function log(msg, type = 'info') {
             const consoleEl = document.getElementById('logConsole');
             const color = type === 'error' ? '#e74c3c' : (type === 'success' ? '#2ecc71' : (type === 'warn' ? '#f39c12' : '#00ff00'));
             consoleEl.innerHTML += `<div style="color:${color}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
             consoleEl.scrollTop = consoleEl.scrollHeight;
+
+            // 为 AOD 模式保存最新日志
+            lastLogMessage = msg;
         }
 
         async function generateImage() {
@@ -1449,6 +1548,9 @@
                 }
 
                 log(`发送 POST 请求...`);
+
+                // 显示 AOD 按钮
+                document.getElementById('aodBtn').style.display = 'inline-block';
 
                 const response = await fetch(url, {
                     method: 'POST',
@@ -1528,6 +1630,181 @@
                 phText.innerText = "请求出错，请检查日志";
             }
         }
+
+        // --- 4. AOD Mode Implementation ---
+        let wakeLock = null;
+        let aodAnimationId = null;
+        let aodStartTime = null;
+        let aodPosition = { x: 100, y: 100 };
+        let aodVelocity = { x: 2, y: 2 };
+        let aodColors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dfe6e9', '#a29bfe', '#fd79a8', '#00b894'];
+        let aodColorIndex = 0;
+
+        // Request Wake Lock
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    log('🔓 屏幕唤醒锁已激活', 'success');
+                    wakeLock.addEventListener('release', () => {
+                        log('🔒 屏幕唤醒锁已释放', 'warn');
+                    });
+                } catch (err) {
+                    log(`屏幕唤醒锁失败: ${err.message}`, 'error');
+                }
+            } else {
+                log('此浏览器不支持 Screen Wake Lock API', 'warn');
+            }
+        }
+
+        // Release Wake Lock
+        async function releaseWakeLock() {
+            if (wakeLock) {
+                await wakeLock.release();
+                wakeLock = null;
+            }
+        }
+
+        // Toggle AOD Mode
+        async function toggleAODMode() {
+            const overlay = document.getElementById('aodOverlay');
+            overlay.classList.add('active');
+
+            // Request fullscreen
+            try {
+                if (overlay.requestFullscreen) {
+                    await overlay.requestFullscreen();
+                } else if (overlay.webkitRequestFullscreen) {
+                    await overlay.webkitRequestFullscreen();
+                } else if (overlay.msRequestFullscreen) {
+                    await overlay.msRequestFullscreen();
+                }
+            } catch (e) {
+                log('全屏请求失败: ' + e.message, 'warn');
+            }
+
+            // Request wake lock
+            await requestWakeLock();
+
+            // Start animation
+            aodStartTime = Date.now();
+            aodPosition = { x: 100, y: 100 };
+            startDVDAnimation();
+        }
+
+        // Exit AOD Mode
+        async function exitAODMode() {
+            const overlay = document.getElementById('aodOverlay');
+            overlay.classList.remove('active');
+
+            // Exit fullscreen
+            try {
+                if (document.exitFullscreen) {
+                    await document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    await document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    await document.msExitFullscreen();
+                }
+            } catch (e) {
+                // Ignore errors when not in fullscreen
+            }
+
+            // Release wake lock
+            await releaseWakeLock();
+
+            // Stop animation
+            if (aodAnimationId) {
+                cancelAnimationFrame(aodAnimationId);
+                aodAnimationId = null;
+            }
+        }
+
+        // DVD Bouncing Animation
+        function startDVDAnimation() {
+            const box = document.getElementById('aodDvdBox');
+            const overlay = document.getElementById('aodOverlay');
+
+            function animate() {
+                if (!overlay.classList.contains('active')) return;
+
+                const boxRect = box.getBoundingClientRect();
+                const overlayRect = overlay.getBoundingClientRect();
+
+                // Update position
+                aodPosition.x += aodVelocity.x;
+                aodPosition.y += aodVelocity.y;
+
+                // Bounce off edges
+                let bounced = false;
+                if (aodPosition.x <= 0 || aodPosition.x + boxRect.width >= overlayRect.width) {
+                    aodVelocity.x *= -1;
+                    bounced = true;
+                    aodPosition.x = Math.max(0, Math.min(aodPosition.x, overlayRect.width - boxRect.width));
+                }
+                if (aodPosition.y <= 0 || aodPosition.y + boxRect.height >= overlayRect.height) {
+                    aodVelocity.y *= -1;
+                    bounced = true;
+                    aodPosition.y = Math.max(0, Math.min(aodPosition.y, overlayRect.height - boxRect.height));
+                }
+
+                // Change color on bounce
+                if (bounced) {
+                    aodColorIndex = (aodColorIndex + 1) % aodColors.length;
+                    const newColor = aodColors[aodColorIndex];
+                    box.style.borderColor = newColor;
+                    box.style.boxShadow = `0 0 30px ${newColor}40`;
+                    document.getElementById('aodTimer').style.color = newColor;
+                    document.getElementById('aodTimer').style.textShadow = `0 0 10px ${newColor}80`;
+                }
+
+                box.style.left = aodPosition.x + 'px';
+                box.style.top = aodPosition.y + 'px';
+
+                // Update timer
+                updateAODTimer();
+
+                // Update log
+                document.getElementById('aodLog').textContent = lastLogMessage || '等待日志...';
+
+                aodAnimationId = requestAnimationFrame(animate);
+            }
+
+            animate();
+        }
+
+        // Update Timer Display
+        function updateAODTimer() {
+            if (!aodStartTime) return;
+
+            const elapsed = Date.now() - aodStartTime;
+            const hours = Math.floor(elapsed / 3600000);
+            const minutes = Math.floor((elapsed % 3600000) / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+
+            const timerStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            document.getElementById('aodTimer').textContent = timerStr;
+        }
+
+        // Handle visibility change to reacquire wake lock
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible' && document.getElementById('aodOverlay').classList.contains('active')) {
+                await requestWakeLock();
+            }
+        });
+
+        // Handle fullscreen change
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement && document.getElementById('aodOverlay').classList.contains('active')) {
+                exitAODMode();
+            }
+        });
+
+        document.addEventListener('webkitfullscreenchange', () => {
+            if (!document.webkitFullscreenElement && document.getElementById('aodOverlay').classList.contains('active')) {
+                exitAODMode();
+            }
+        });
     </script>
 
 </body>
