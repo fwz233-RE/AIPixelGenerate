@@ -750,21 +750,13 @@
         </div>
     </div>
 
-    <!-- AOD Mode: Video Fullscreen with Canvas Overlay -->
+    <!-- AOD Mode: Video Fullscreen Only -->
     <div class="aod-container" id="aodContainer" style="display:none;">
         <!-- 黑色视频 - 使用原生全屏以隐藏iOS状态栏 -->
-        <video id="aodBlackVideo" playsinline webkit-playsinline muted loop preload="auto"
-            style="position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#000;">
+        <video id="aodBlackVideo" playsinline webkit-playsinline muted loop preload="auto" onclick="exitAODMode()"
+            style="position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#000;cursor:pointer;">
             <source src="黑.mp4" type="video/mp4">
         </video>
-
-        <!-- Canvas叠加层用于绘制DVD动画 -->
-        <canvas id="aodCanvas"
-            style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
-
-        <!-- 点击区域退出全屏 -->
-        <div onclick="exitAODMode()"
-            style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:2;cursor:pointer;"></div>
     </div>
 
     <!-- 压缩对话框 -->
@@ -1581,16 +1573,9 @@
             }
         }
 
-        // --- 4. AOD Mode Implementation ---
+        // --- 4. AOD Mode Implementation (Video Only) ---
         let wakeLock = null;
-        let aodAnimationId = null;
         let requestStartTime = null; // 请求开始时间，用于计时
-        let aodPosition = { x: 100, y: 100 };
-        let aodVelocity = { x: 60, y: 45 }; // pixels per second
-        let aodLastTime = null;
-        let aodColors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dfe6e9', '#a29bfe', '#fd79a8', '#00b894'];
-        let aodColorIndex = 0;
-        let blackVideoBlob = null; // 缓存黑色视频blob
 
         // Request Wake Lock
         async function requestWakeLock() {
@@ -1625,17 +1610,9 @@
         async function toggleAODMode() {
             const container = document.getElementById('aodContainer');
             const video = document.getElementById('aodBlackVideo');
-            canvas = document.getElementById('aodCanvas');
-            ctx = canvas.getContext('2d', { alpha: true });
 
             // 显示容器
             container.style.display = 'block';
-
-            // 设置canvas尺寸
-            canvasWidth = window.innerWidth;
-            canvasHeight = window.innerHeight;
-            canvas.width = canvasWidth;
-            canvas.height = canvasHeight;
 
             // 播放视频
             try {
@@ -1656,25 +1633,13 @@
 
             // Request wake lock
             await requestWakeLock();
-
-            // 重置位置并开始canvas动画
-            aodPosition = {
-                x: Math.random() * (canvasWidth - 250),
-                y: Math.random() * (canvasHeight - 100)
-            };
-            startCanvasDVDAnimation();
         }
+
 
         // Exit AOD Mode
         async function exitAODMode() {
             const container = document.getElementById('aodContainer');
             const video = document.getElementById('aodBlackVideo');
-
-            // 停止动画
-            if (aodAnimationId) {
-                cancelAnimationFrame(aodAnimationId);
-                aodAnimationId = null;
-            }
 
             // 退出全屏
             try {
@@ -1697,150 +1662,6 @@
             await releaseWakeLock();
         }
 
-        // Canvas-based DVD Animation - 60fps smooth
-        function startCanvasDVDAnimation() {
-            aodLastTime = performance.now();
-            const boxWidth = 250;
-            const boxHeight = 80;
-
-            function animate(currentTime) {
-                if (!canvas || !ctx) return;
-
-                // Calculate delta time
-                const deltaTime = (currentTime - aodLastTime) / 1000;
-                aodLastTime = currentTime;
-
-                // Update canvas size if window resized
-                if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
-                    canvasWidth = canvas.width = window.innerWidth;
-                    canvasHeight = canvas.height = window.innerHeight;
-                }
-
-                // Clear canvas
-                ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-
-                // Update position
-                aodPosition.x += aodVelocity.x * deltaTime;
-                aodPosition.y += aodVelocity.y * deltaTime;
-
-                // Bounce detection
-                let bounced = false;
-                if (aodPosition.x <= 0) {
-                    aodPosition.x = 0;
-                    aodVelocity.x = Math.abs(aodVelocity.x);
-                    bounced = true;
-                } else if (aodPosition.x + boxWidth >= canvasWidth) {
-                    aodPosition.x = canvasWidth - boxWidth;
-                    aodVelocity.x = -Math.abs(aodVelocity.x);
-                    bounced = true;
-                }
-                if (aodPosition.y <= 0) {
-                    aodPosition.y = 0;
-                    aodVelocity.y = Math.abs(aodVelocity.y);
-                    bounced = true;
-                } else if (aodPosition.y + boxHeight >= canvasHeight) {
-                    aodPosition.y = canvasHeight - boxHeight;
-                    aodVelocity.y = -Math.abs(aodVelocity.y);
-                    bounced = true;
-                }
-
-                // Change color on bounce
-                if (bounced) {
-                    aodColorIndex = (aodColorIndex + 1) % aodColors.length;
-                }
-
-                const currentColor = aodColors[aodColorIndex];
-
-                // Draw box with rounded corners
-                ctx.save();
-                ctx.translate(aodPosition.x, aodPosition.y);
-
-                // Box background
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-                ctx.strokeStyle = currentColor;
-                ctx.lineWidth = 1;
-                ctx.shadowColor = currentColor;
-                ctx.shadowBlur = 15;
-                roundRect(ctx, 0, 0, boxWidth, boxHeight, 8);
-                ctx.fill();
-                ctx.stroke();
-
-                // Draw timer text
-                ctx.shadowBlur = 5;
-                ctx.fillStyle = currentColor;
-                ctx.font = '12px Consolas, Monaco, monospace';
-                ctx.textAlign = 'left';
-                const timerText = getTimerText();
-                ctx.fillText(timerText, 12, 25);
-
-                // Draw log text
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                ctx.font = '10px Consolas, Monaco, monospace';
-                const logText = wrapText(ctx, lastLogMessage || '等待日志...', 230);
-                logText.forEach((line, i) => {
-                    ctx.fillText(line, 12, 45 + i * 14);
-                });
-
-                ctx.restore();
-
-                aodAnimationId = requestAnimationFrame(animate);
-            }
-
-            aodAnimationId = requestAnimationFrame(animate);
-        }
-
-        // Helper: Draw rounded rectangle
-        function roundRect(ctx, x, y, width, height, radius) {
-            ctx.beginPath();
-            ctx.moveTo(x + radius, y);
-            ctx.lineTo(x + width - radius, y);
-            ctx.arc(x + width - radius, y + radius, radius, -Math.PI / 2, 0);
-            ctx.lineTo(x + width, y + height - radius);
-            ctx.arc(x + width - radius, y + height - radius, radius, 0, Math.PI / 2);
-            ctx.lineTo(x + radius, y + height);
-            ctx.arc(x + radius, y + height - radius, radius, Math.PI / 2, Math.PI);
-            ctx.lineTo(x, y + radius);
-            ctx.arc(x + radius, y + radius, radius, Math.PI, -Math.PI / 2);
-            ctx.closePath();
-        }
-
-        // Helper: Wrap text for canvas
-        function wrapText(ctx, text, maxWidth) {
-            const words = text.split('');
-            const lines = [];
-            let currentLine = '';
-
-            for (let char of words) {
-                const testLine = currentLine + char;
-                const metrics = ctx.measureText(testLine);
-                if (metrics.width > maxWidth && currentLine.length > 0) {
-                    lines.push(currentLine);
-                    currentLine = char;
-                } else {
-                    currentLine = testLine;
-                }
-            }
-            lines.push(currentLine);
-            return lines.slice(0, 2); // 最多2行
-        }
-
-        // Get Timer Text
-        function getTimerText() {
-            if (!requestStartTime) return '请求时间0秒';
-
-            const elapsed = Date.now() - requestStartTime;
-            const totalSeconds = Math.floor(elapsed / 1000);
-            const minutes = Math.floor(totalSeconds / 60);
-            const seconds = totalSeconds % 60;
-
-            let timerStr;
-            if (minutes === 0) {
-                timerStr = `请求时间${seconds}秒`;
-            } else {
-                timerStr = `请求时间${minutes}分${seconds}秒`;
-            }
-            return timerStr;
-        }
 
         // Handle visibility change to reacquire wake lock
         document.addEventListener('visibilitychange', async () => {
