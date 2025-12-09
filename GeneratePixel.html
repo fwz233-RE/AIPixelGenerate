@@ -835,10 +835,10 @@
         /* AOD 模式样式 */
         .aod-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            top: calc(-1 * env(safe-area-inset-top, 0px));
+            left: calc(-1 * env(safe-area-inset-left, 0px));
+            right: calc(-1 * env(safe-area-inset-right, 0px));
+            bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
             background-color: #000000;
             z-index: 9999;
             display: flex;
@@ -884,7 +884,7 @@
     <link rel="icon" href="icon.PNG" type="image/png">
     <link rel="apple-touch-icon" href="icon.PNG">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#4a90e2">
     <link rel="manifest" href="manifest.json">
 </head>
@@ -1657,6 +1657,7 @@
         let noSleepVideo = null;
         let requestStartTime = null;
         let isRequestInProgress = false;
+        let originalThemeColor = null;
 
         function enterAODMode() {
             // 防止重复进入
@@ -1694,6 +1695,19 @@
             lines = lines.map(line => line.padEnd(width, ' '));
 
             const blockText = lines.join('\n');
+
+            // 设置body样式防止滚动
+            document.body.style.overflow = 'hidden';
+            document.body.style.height = '100vh';
+            document.documentElement.style.height = '100vh';
+            document.documentElement.style.overflow = 'hidden';
+
+            // 修改主题颜色为黑色以匹配AOD模式
+            const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+            if (themeColorMeta) {
+                originalThemeColor = themeColorMeta.getAttribute('content');
+                themeColorMeta.setAttribute('content', '#000000');
+            }
 
             // 创建覆盖层
             aodOverlay = document.createElement('div');
@@ -1780,6 +1794,18 @@
             // 允许息屏
             allowScreenSleep();
 
+            // 恢复body样式
+            document.body.style.overflow = '';
+            document.body.style.height = '';
+            document.documentElement.style.height = '';
+            document.documentElement.style.overflow = '';
+
+            // 恢复主题颜色
+            const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+            if (themeColorMeta && originalThemeColor) {
+                themeColorMeta.setAttribute('content', originalThemeColor);
+            }
+
             // 如果请求已完成，更新状态
             if (requestCompleted) {
                 isRequestInProgress = false;
@@ -1795,7 +1821,7 @@
 
             // 初始速度方向随机，速度较慢
             let angle = Math.random() * Math.PI * 2;
-            let speed = 0.8; // 像素/毫秒（较慢速度）
+            let speed = 0.2; // 像素/毫秒（较慢速度）
             let vx = Math.cos(angle) * speed;
             let vy = Math.sin(angle) * speed;
 
