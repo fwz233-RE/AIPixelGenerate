@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>AI 图像生成器 Pro (多图版)</title>
     <style>
         :root {
@@ -837,8 +837,8 @@
             position: fixed;
             top: 0;
             left: 0;
-            width: 100vw;
-            height: 100vh;
+            right: 0;
+            bottom: 0;
             background-color: #000000;
             z-index: 9999;
             display: flex;
@@ -848,6 +848,7 @@
             color: #00ff00;
             overflow: hidden;
             cursor: pointer;
+            box-sizing: border-box;
         }
 
         .aod-text-block {
@@ -866,16 +867,16 @@
 
         .aod-time-display {
             position: absolute;
-            top: 20px;
+            top: -20px;
             left: 0;
             width: 100%;
             text-align: center;
-            font-size: 12px;
+            font-size: 10px;
             color: #00ff00;
             text-shadow: 0 0 2px #00ff00;
             opacity: 0.8;
-            z-index: 10000;
             pointer-events: none;
+            white-space: nowrap;
         }
     </style>
 
@@ -883,7 +884,7 @@
     <link rel="icon" href="icon.PNG" type="image/png">
     <link rel="apple-touch-icon" href="icon.PNG">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="theme-color" content="#4a90e2">
     <link rel="manifest" href="manifest.json">
 </head>
@@ -1702,11 +1703,12 @@
             const timeDisplay = document.createElement('div');
             timeDisplay.className = 'aod-time-display';
             timeDisplay.id = 'aodTimeDisplay';
-            aodOverlay.appendChild(timeDisplay);
+            // 时间显示将添加到文本块内部
 
             aodTextBlock = document.createElement('div');
             aodTextBlock.className = 'aod-text-block';
             aodTextBlock.textContent = blockText;
+            aodTextBlock.appendChild(timeDisplay);
             aodOverlay.appendChild(aodTextBlock);
             document.body.appendChild(aodOverlay);
 
@@ -1812,21 +1814,21 @@
 
                 if (x <= 0) {
                     x = 0;
-                    vx = Math.abs(vx) * 0.95; // 反弹并损失少量能量
+                    vx = Math.abs(vx); // 反弹，保持速度大小
                     bounced = true;
                 } else if (x + rect.width >= window.innerWidth) {
                     x = window.innerWidth - rect.width;
-                    vx = -Math.abs(vx) * 0.95;
+                    vx = -Math.abs(vx);
                     bounced = true;
                 }
 
                 if (y <= 0) {
                     y = 0;
-                    vy = Math.abs(vy) * 0.95;
+                    vy = Math.abs(vy);
                     bounced = true;
                 } else if (y + rect.height >= window.innerHeight) {
                     y = window.innerHeight - rect.height;
-                    vy = -Math.abs(vy) * 0.95;
+                    vy = -Math.abs(vy);
                     bounced = true;
                 }
 
@@ -1863,10 +1865,51 @@
                 } catch (err) {
                     console.error(`唤醒锁定失败: ${err.message}`);
                 }
+            } else {
+                // iOS等不支持Wake Lock的平台，使用视频防息屏
+                try {
+                    noSleepVideo = document.createElement('video');
+                    noSleepVideo.setAttribute('playsinline', '');
+                    noSleepVideo.setAttribute('webkit-playsinline', '');
+                    noSleepVideo.muted = true;
+                    noSleepVideo.loop = true;
+                    // 设置一个透明的1x1像素视频
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 1;
+                    canvas.height = 1;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = 'black';
+                    ctx.fillRect(0, 0, 1, 1);
+                    const stream = canvas.captureStream();
+                    noSleepVideo.srcObject = stream;
+
+                    // 隐藏视频
+                    noSleepVideo.style.position = 'fixed';
+                    noSleepVideo.style.top = '-9999px';
+                    noSleepVideo.style.left = '-9999px';
+                    noSleepVideo.style.width = '1px';
+                    noSleepVideo.style.height = '1px';
+                    noSleepVideo.style.opacity = '0';
+                    noSleepVideo.style.pointerEvents = 'none';
+                    document.body.appendChild(noSleepVideo);
+
+                    // 尝试播放
+                    const playPromise = noSleepVideo.play();
+                    if (playPromise !== undefined) {
+                        playPromise.catch(e => {
+                            console.error('视频防息屏播放失败:', e);
+                            // 如果播放失败，尝试使用一个真实的视频源
+                            noSleepVideo.srcObject = null;
+                            noSleepVideo.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAKxtZGF0AAAAsAAAAF4AAAIAAQABABAABAAXAAEAAgACAAUABAAAAAIAAAAAAB9pbHN0AAAA8AAAACxpbmVmAAAARAAAAB5pbmVsIAAAAEQAAAAIc3RibAAAAJwAAACEc3RzZAAAAJwAAAAYbXA0MQAAABQAAAAgbWRhdAAAAKwAAAAY';
+                            noSleepVideo.load();
+                            noSleepVideo.play().catch(e2 => console.error('备用视频播放也失败:', e2));
+                        });
+                    }
+                    console.log('视频防息屏已激活');
+                } catch (e) {
+                    console.error('视频防息屏初始化失败:', e);
+                }
             }
-            // 其他平台的备用方案
-            // iOS/Android: 通常通过添加到主屏幕(PWA)或WebView设置支持
-            // Windows/Mac: 依赖浏览器支持
         }
 
         function allowScreenSleep() {
