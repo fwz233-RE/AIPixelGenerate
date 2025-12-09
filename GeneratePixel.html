@@ -692,6 +692,123 @@
                 font-size: 16px;
                 padding: 8px;
             }
+
+            /* 压缩对话框移动端优化 */
+            .compress-dialog {
+                max-width: 100%;
+                max-height: 90vh;
+                margin: 10px;
+                border-radius: 12px;
+            }
+
+            .compress-header {
+                padding: 10px 15px;
+            }
+
+            .compress-header h2 {
+                font-size: 1.1em;
+            }
+
+            .compress-controls {
+                grid-template-columns: 1fr;
+                gap: 15px;
+                padding: 12px;
+            }
+
+            .control-group label {
+                font-size: 0.9em;
+            }
+
+            .size-presets {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                margin-top: 8px;
+            }
+
+            .preset-btn {
+                flex: 1;
+                min-width: 60px;
+                padding: 6px 8px;
+                font-size: 12px;
+            }
+
+            .compare-container {
+                flex-direction: column;
+                height: 40vh;
+            }
+
+            .compare-panel {
+                flex: 1;
+                min-height: 0;
+            }
+
+            .panel-header {
+                padding: 8px 12px;
+                font-size: 0.9em;
+            }
+
+            .size-badge {
+                font-size: 0.8em;
+                padding: 2px 6px;
+            }
+
+            .zoom-controls {
+                padding: 8px;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            .zoom-btn {
+                padding: 6px 10px;
+                font-size: 14px;
+            }
+
+            .zoom-level {
+                font-size: 0.9em;
+            }
+
+            .sync-zoom-toggle {
+                font-size: 0.8em;
+                margin-left: auto;
+            }
+
+            .compress-footer {
+                padding: 10px 15px;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .compression-stats {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 10px;
+            }
+
+            .stat-item {
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+            }
+
+            .stat-label {
+                font-size: 0.8em;
+            }
+
+            .stat-value {
+                font-size: 0.9em;
+            }
+
+            .footer-buttons {
+                display: flex;
+                gap: 10px;
+            }
+
+            .btn-cancel,
+            .btn-confirm {
+                flex: 1;
+                padding: 10px;
+                font-size: 0.9em;
+            }
         }
 
         /* 针对超小屏幕的优化 */
@@ -736,13 +853,29 @@
         .aod-text-block {
             position: absolute;
             white-space: pre;
-            font-size: 20px;
+            font-size: 14px;
             line-height: 1.2;
-            text-shadow: 0 0 5px #00ff00;
-            padding: 10px;
+            text-shadow: 0 0 3px #00ff00;
+            padding: 6px 8px;
             border: 1px solid #00ff00;
-            background-color: rgba(0, 0, 0, 0.7);
-            border-radius: 4px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border-radius: 3px;
+            transition: transform 0.1s linear;
+            will-change: transform;
+        }
+
+        .aod-time-display {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 12px;
+            color: #00ff00;
+            text-shadow: 0 0 2px #00ff00;
+            opacity: 0.8;
+            z-index: 10000;
+            pointer-events: none;
         }
     </style>
 
@@ -851,7 +984,7 @@
                             <span id="sizeValue">1024px</span>
                         </label>
                         <div class="slider-container">
-                            <input type="range" id="sizeSlider" min="256" max="4096" value="1024" step="128"
+                            <input type="range" id="sizeSlider" min="256" max="4096" value="1024" step="1"
                                 oninput="updateCompression()">
                         </div>
                         <div class="size-presets">
@@ -1078,6 +1211,14 @@
                 const sizeSlider = document.getElementById('sizeSlider');
                 sizeSlider.max = originalMaxDimension;
 
+                // 调整最小值，确保原始尺寸可选择
+                if (originalMaxDimension < 256) {
+                    sizeSlider.min = Math.max(64, Math.floor(originalMaxDimension / 4));
+                }
+
+                // 设置步长为1，确保原始尺寸可以精确选择
+                sizeSlider.step = 1;
+
                 // 设置默认使用原尺寸
                 sizeSlider.value = originalMaxDimension;
 
@@ -1214,6 +1355,8 @@
             if (size === 'original') {
                 // 使用原图的最大边长
                 document.getElementById('sizeSlider').value = originalMaxDimension;
+                // 自动将质量设为100%，确保使用原始图片
+                document.getElementById('qualitySlider').value = 100;
             } else {
                 document.getElementById('sizeSlider').value = size;
             }
@@ -1222,6 +1365,31 @@
 
         function performCompression(quality, maxSize) {
             if (!originalImageObj) return;
+
+            // 检查是否不需要处理：质量100%且尺寸为原尺寸
+            if (quality >= 0.999 && maxSize >= originalMaxDimension && currentOriginalBase64) {
+                // 直接使用原始图片
+                currentCompressedBase64 = currentOriginalBase64;
+                compressedWidth = originalImageObj.width;
+                compressedHeight = originalImageObj.height;
+
+                // 更新压缩后预览
+                const compressedImg = document.getElementById('compressedPreview');
+                compressedImg.src = currentCompressedBase64;
+
+                // 更新统计信息
+                const originalSizeBytes = (currentOriginalBase64.length * 3 / 4);
+                const compressedSizeBytes = originalSizeBytes;
+                const savings = 0; // 无节省
+
+                document.getElementById('compressedSize').textContent = formatSize(compressedSizeBytes);
+                document.getElementById('statCompressedDim').textContent = `${compressedWidth} × ${compressedHeight}`;
+                document.getElementById('statSavings').textContent = `${savings}%`;
+
+                // 应用当前缩放
+                applyTransform();
+                return;
+            }
 
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -1483,6 +1651,7 @@
         let aodOverlay = null;
         let aodTextBlock = null;
         let aodAnimationId = null;
+        let aodTimeUpdateId = null;
         let wakeLock = null;
         let noSleepVideo = null;
         let requestStartTime = null;
@@ -1528,11 +1697,33 @@
             // 创建覆盖层
             aodOverlay = document.createElement('div');
             aodOverlay.className = 'aod-overlay';
+
+            // 创建时间显示
+            const timeDisplay = document.createElement('div');
+            timeDisplay.className = 'aod-time-display';
+            timeDisplay.id = 'aodTimeDisplay';
+            aodOverlay.appendChild(timeDisplay);
+
             aodTextBlock = document.createElement('div');
             aodTextBlock.className = 'aod-text-block';
             aodTextBlock.textContent = blockText;
             aodOverlay.appendChild(aodTextBlock);
             document.body.appendChild(aodOverlay);
+
+            // 更新时间显示
+            function updateTimeDisplay() {
+                if (!requestStartTime || !isRequestInProgress) return;
+                const elapsed = Date.now() - requestStartTime;
+                const seconds = Math.floor(elapsed / 1000);
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                const timeText = `请求已运行: ${minutes > 0 ? `${minutes}分` : ''}${remainingSeconds}秒`;
+                timeDisplay.textContent = timeText;
+            }
+
+            // 初始更新并设置定时器
+            updateTimeDisplay();
+            aodTimeUpdateId = setInterval(updateTimeDisplay, 1000);
 
             // 启动DVD动画
             startDVDAnimation(aodTextBlock);
@@ -1571,6 +1762,12 @@
                 aodAnimationId = null;
             }
 
+            // 清除时间更新定时器
+            if (aodTimeUpdateId) {
+                clearInterval(aodTimeUpdateId);
+                aodTimeUpdateId = null;
+            }
+
             // 移除覆盖层
             if (aodOverlay && aodOverlay.parentNode) {
                 aodOverlay.parentNode.removeChild(aodOverlay);
@@ -1589,42 +1786,71 @@
 
         function startDVDAnimation(element) {
             const rect = element.getBoundingClientRect();
+
+            // 初始位置随机
             let x = Math.random() * (window.innerWidth - rect.width);
             let y = Math.random() * (window.innerHeight - rect.height);
-            let dx = 2;
-            let dy = 2;
 
-            function animate() {
-                x += dx;
-                y += dy;
+            // 初始速度方向随机，速度较慢
+            let angle = Math.random() * Math.PI * 2;
+            let speed = 0.8; // 像素/毫秒（较慢速度）
+            let vx = Math.cos(angle) * speed;
+            let vy = Math.sin(angle) * speed;
 
-                // 边界碰撞检测
-                if (x <= 0 || x + rect.width >= window.innerWidth) {
-                    dx = -dx;
-                    // 轻微随机化角度
-                    dy += (Math.random() - 0.5) * 0.5;
+            let lastTime = performance.now();
+
+            function animate(currentTime) {
+                const deltaTime = currentTime - lastTime;
+                lastTime = currentTime;
+
+                // 基于时间更新位置
+                x += vx * deltaTime;
+                y += vy * deltaTime;
+
+                // 边界碰撞检测和反弹
+                let bounced = false;
+
+                if (x <= 0) {
+                    x = 0;
+                    vx = Math.abs(vx) * 0.95; // 反弹并损失少量能量
+                    bounced = true;
+                } else if (x + rect.width >= window.innerWidth) {
+                    x = window.innerWidth - rect.width;
+                    vx = -Math.abs(vx) * 0.95;
+                    bounced = true;
                 }
-                if (y <= 0 || y + rect.height >= window.innerHeight) {
-                    dy = -dy;
-                    dx += (Math.random() - 0.5) * 0.5;
+
+                if (y <= 0) {
+                    y = 0;
+                    vy = Math.abs(vy) * 0.95;
+                    bounced = true;
+                } else if (y + rect.height >= window.innerHeight) {
+                    y = window.innerHeight - rect.height;
+                    vy = -Math.abs(vy) * 0.95;
+                    bounced = true;
                 }
 
-                // 限制速度
-                const speed = Math.sqrt(dx*dx + dy*dy);
-                if (speed > 5) {
-                    dx = dx / speed * 3;
-                    dy = dy / speed * 3;
+                // 如果发生碰撞，轻微随机化角度
+                if (bounced) {
+                    const angleChange = (Math.random() - 0.5) * 0.2; // 小角度变化
+                    const currentAngle = Math.atan2(vy, vx);
+                    const newAngle = currentAngle + angleChange;
+                    const currentSpeed = Math.sqrt(vx*vx + vy*vy);
+                    vx = Math.cos(newAngle) * currentSpeed;
+                    vy = Math.sin(newAngle) * currentSpeed;
                 }
 
-                element.style.left = `${x}px`;
-                element.style.top = `${y}px`;
+                // 应用transform实现硬件加速
+                element.style.transform = `translate(${x}px, ${y}px)`;
 
                 aodAnimationId = requestAnimationFrame(animate);
             }
 
+            // 设置初始位置
             element.style.position = 'absolute';
-            element.style.left = `${x}px`;
-            element.style.top = `${y}px`;
+            element.style.left = '0';
+            element.style.top = '0';
+            element.style.transform = `translate(${x}px, ${y}px)`;
 
             aodAnimationId = requestAnimationFrame(animate);
         }
