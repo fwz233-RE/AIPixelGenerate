@@ -672,12 +672,13 @@
             left: 0;
             width: 100%;
             height: 100%;
+            /* 使用env()支持iOS safe area */
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
             background: #000;
             z-index: 2000;
             overflow: hidden;
             cursor: pointer;
-            /* iOS safe area */
-            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+            -webkit-tap-highlight-color: transparent;
         }
 
         .aod-overlay.active {
@@ -686,8 +687,8 @@
 
         .aod-dvd-box {
             position: absolute;
-            left: 0;
             top: 0;
+            left: 0;
             padding: 8px 12px;
             border-radius: 8px;
             border: 1px solid #4ecdc4;
@@ -696,9 +697,10 @@
             font-family: 'Consolas', 'Monaco', monospace;
             box-shadow: 0 0 15px rgba(78, 205, 196, 0.2);
             pointer-events: none;
-            /* GPU acceleration */
+            /* GPU加速关键属性 */
             will-change: transform;
             transform: translate3d(0, 0, 0);
+            -webkit-transform: translate3d(0, 0, 0);
             backface-visibility: hidden;
             -webkit-backface-visibility: hidden;
         }
@@ -719,6 +721,40 @@
             line-height: 1.3;
         }
 
+        /* iOS全屏视频容器 */
+        .aod-video-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            z-index: 1999;
+            display: none;
+        }
+
+        .aod-video-container.active {
+            display: block;
+        }
+
+        .aod-video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #000;
+        }
+
+        /* 视频上的覆盖层（DVB动画） */
+        .aod-video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
         .aod-btn {
             background: linear-gradient(135deg, #1a1a2e, #16213e) !important;
             border: 1px solid #444 !important;
@@ -731,16 +767,15 @@
             background: linear-gradient(135deg, #16213e, #0f3460) !important;
         }
 
-        /* iOS fullscreen video canvas */
-        .aod-video-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+        .aod-hint {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 10px;
             pointer-events: none;
-            z-index: -1;
+            z-index: 2001;
         }
     </style>
 </head>
@@ -818,11 +853,21 @@
 
     <!-- AOD Mode Overlay -->
     <div class="aod-overlay" id="aodOverlay" onclick="exitAODMode()">
-        <!-- 用于iOS全屏的黑色视频 -->
-        <video id="aodBlackVideo" class="aod-video-canvas" playsinline muted loop></video>
         <div class="aod-dvd-box" id="aodDvdBox">
             <div class="aod-timer" id="aodTimer">请求时间0秒</div>
             <div class="aod-log" id="aodLog">等待日志...</div>
+        </div>
+        <div class="aod-hint" id="aodHint">点击屏幕退出</div>
+    </div>
+
+    <!-- iOS全屏视频容器 (点击进入真正全屏) -->
+    <div class="aod-video-container" id="aodVideoContainer">
+        <video id="aodFullscreenVideo" playsinline webkit-playsinline muted loop></video>
+        <div class="aod-video-overlay" id="aodVideoOverlay">
+            <div class="aod-dvd-box" id="aodDvdBox2">
+                <div class="aod-timer" id="aodTimer2">请求时间0秒</div>
+                <div class="aod-log" id="aodLog2">等待日志...</div>
+            </div>
         </div>
     </div>
 
@@ -1644,115 +1689,127 @@
         let wakeLock = null;
         let aodAnimationId = null;
         let requestStartTime = null; // 请求开始时间，用于计时
-        let aodPosition = { x: 100, y: 100 };
-        let aodVelocity = { x: 60, y: 45 }; // pixels per second
+        let aodPosition = { x: 50, y: 50 };
+        let aodVelocity = { x: 80, y: 60 }; // pixels per second
         let aodLastTime = null;
         let aodColors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dfe6e9', '#a29bfe', '#fd79a8', '#00b894'];
         let aodColorIndex = 0;
-        let blackVideoBlob = null; // 缓存黑色视频blob
+        let blackVideoUrl = null; // 缓存黑色视频URL
+        let aodOverlaySize = { width: 0, height: 0 }; // 缓存尺寸避免重排
+        let aodBoxSize = { width: 0, height: 0 };
+        let isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
         // Request Wake Lock
         async function requestWakeLock() {
             if ('wakeLock' in navigator) {
                 try {
                     wakeLock = await navigator.wakeLock.request('screen');
-                    // 不输出日志，改为静默激活
-                    wakeLock.addEventListener('release', () => {
-                        // 静默释放
-                    });
-                } catch (err) {
-                    // 静默处理错误
-                }
+                    wakeLock.addEventListener('release', () => { });
+                } catch (err) { }
             }
         }
 
         // Release Wake Lock
         async function releaseWakeLock() {
             if (wakeLock) {
-                await wakeLock.release();
+                try { await wakeLock.release(); } catch (e) { }
                 wakeLock = null;
             }
         }
 
-        // 创建黑色视频Blob用于iOS全屏 - 使用canvas生成
-        let blackVideoBlobUrl = null;
-        async function createBlackVideoBlob() {
-            if (blackVideoBlobUrl) return blackVideoBlobUrl;
+        // 使用Canvas生成真正的黑色视频用于iOS全屏
+        async function createBlackVideo() {
+            if (blackVideoUrl) return blackVideoUrl;
 
-            // 创建一个黑色canvas
-            const canvas = document.createElement('canvas');
-            canvas.width = 2;
-            canvas.height = 2;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, 2, 2);
+            return new Promise((resolve) => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 2;
+                    canvas.height = 2;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(0, 0, 2, 2);
 
-            // 尝试使MediaRecorder录制一个短视频
-            try {
-                const stream = canvas.captureStream(1);
-                const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-                const chunks = [];
+                    // 尝试使用MediaRecorder生成视频
+                    if (typeof MediaRecorder !== 'undefined' && canvas.captureStream) {
+                        const stream = canvas.captureStream(1);
+                        const chunks = [];
+                        const mimeType = MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' :
+                            MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : '';
 
-                return new Promise((resolve) => {
-                    recorder.ondataavailable = (e) => chunks.push(e.data);
-                    recorder.onstop = () => {
-                        const blob = new Blob(chunks, { type: 'video/webm' });
-                        blackVideoBlobUrl = URL.createObjectURL(blob);
-                        resolve(blackVideoBlobUrl);
-                    };
-                    recorder.start();
-                    setTimeout(() => recorder.stop(), 100);
-                });
-            } catch (e) {
-                return null;
-            }
-        }
-
-        // AOD DOM 元素缓存
-        let aodElements = null;
-        function getAodElements() {
-            if (!aodElements) {
-                aodElements = {
-                    overlay: document.getElementById('aodOverlay'),
-                    box: document.getElementById('aodDvdBox'),
-                    timer: document.getElementById('aodTimer'),
-                    log: document.getElementById('aodLog'),
-                    video: document.getElementById('aodBlackVideo')
-                };
-            }
-            return aodElements;
+                        if (mimeType) {
+                            const recorder = new MediaRecorder(stream, { mimeType });
+                            recorder.ondataavailable = (e) => chunks.push(e.data);
+                            recorder.onstop = () => {
+                                const blob = new Blob(chunks, { type: mimeType });
+                                blackVideoUrl = URL.createObjectURL(blob);
+                                resolve(blackVideoUrl);
+                            };
+                            recorder.start();
+                            // 录制100ms的黑色视频
+                            setTimeout(() => recorder.stop(), 100);
+                            return;
+                        }
+                    }
+                    resolve(null);
+                } catch (e) {
+                    resolve(null);
+                }
+            });
         }
 
         // Toggle AOD Mode
         async function toggleAODMode() {
-            const els = getAodElements();
-            els.overlay.classList.add('active');
+            const overlay = document.getElementById('aodOverlay');
+            const box = document.getElementById('aodDvdBox');
 
-            // 创建并播放黑色视频用于iOS
+            overlay.classList.add('active');
+
+            // 初始化位置和速度
+            aodPosition = { x: 50, y: 50 };
+            aodVelocity = { x: 80, y: 60 };
+
+            // 等待一帧让元素渲染，然后获取尺寸
+            await new Promise(r => requestAnimationFrame(r));
+
+            // 缓存尺寸
+            const overlayRect = overlay.getBoundingClientRect();
+            const boxRect = box.getBoundingClientRect();
+            aodOverlaySize = { width: overlayRect.width, height: overlayRect.height };
+            aodBoxSize = { width: boxRect.width, height: boxRect.height };
+
+            // 对于iOS，尝试创建并播放全屏视频
+            if (isIOSDevice) {
+                try {
+                    const videoUrl = await createBlackVideo();
+                    const video = document.getElementById('aodFullscreenVideo');
+                    if (videoUrl && video) {
+                        video.src = videoUrl;
+                        video.load();
+                        // iOS需要用户交互后才能全屏，设置点击事件
+                        const container = document.getElementById('aodVideoContainer');
+                        container.classList.add('active');
+                        video.play().catch(() => { });
+
+                        // 尝试进入视频全屏（iOS原生全屏可隐藏状态栏）
+                        video.addEventListener('canplay', async function onCanPlay() {
+                            video.removeEventListener('canplay', onCanPlay);
+                            try {
+                                if (video.webkitEnterFullscreen) {
+                                    await video.webkitEnterFullscreen();
+                                }
+                            } catch (e) { }
+                        }, { once: true });
+                    }
+                } catch (e) { }
+            }
+
+            // 普通全屏请求
             try {
-                const videoUrl = await createBlackVideoBlob();
-                if (videoUrl && els.video) {
-                    els.video.src = videoUrl;
-                    els.video.play().catch(() => { });
-
-                    // 尝试让视频全屏（iOS上可能隐藏状态栏）
-                    try {
-                        if (els.video.webkitEnterFullscreen) {
-                            // iOS Safari特有的视频全屏API
-                            // 注意：这会把overlay的内容也包含进去
-                        }
-                    } catch (e) { }
-                }
-            } catch (e) { }
-
-            // Request fullscreen on overlay
-            try {
-                if (els.overlay.requestFullscreen) {
-                    await els.overlay.requestFullscreen();
-                } else if (els.overlay.webkitRequestFullscreen) {
-                    await els.overlay.webkitRequestFullscreen();
-                } else if (els.overlay.msRequestFullscreen) {
-                    await els.overlay.msRequestFullscreen();
+                if (overlay.requestFullscreen) {
+                    await overlay.requestFullscreen();
+                } else if (overlay.webkitRequestFullscreen) {
+                    await overlay.webkitRequestFullscreen();
                 }
             } catch (e) { }
 
@@ -1760,19 +1817,24 @@
             await requestWakeLock();
 
             // Start animation
-            aodPosition = { x: 50, y: 50 };
-            aodBoxSize = null; // 重新获取尺寸
             startDVDAnimation();
         }
 
         // Exit AOD Mode
         async function exitAODMode() {
-            const els = getAodElements();
-            els.overlay.classList.remove('active');
+            const overlay = document.getElementById('aodOverlay');
+            const videoContainer = document.getElementById('aodVideoContainer');
+            const video = document.getElementById('aodFullscreenVideo');
+
+            overlay.classList.remove('active');
+            videoContainer.classList.remove('active');
 
             // 停止视频
-            if (els.video) {
-                els.video.pause();
+            if (video) {
+                video.pause();
+                try {
+                    if (video.webkitExitFullscreen) video.webkitExitFullscreen();
+                } catch (e) { }
             }
 
             // Exit fullscreen
@@ -1781,8 +1843,6 @@
                     await document.exitFullscreen();
                 } else if (document.webkitExitFullscreen) {
                     await document.webkitExitFullscreen();
-                } else if (document.msExitFullscreen) {
-                    await document.msExitFullscreen();
                 }
             } catch (e) { }
 
@@ -1796,40 +1856,36 @@
             }
         }
 
-        // DVD Bouncing Animation - GPU accelerated with transform3d
-        let aodBoxSize = null;
-        let lastTimerUpdate = 0;
-
+        // DVD Bouncing Animation - GPU加速版本
         function startDVDAnimation() {
-            const els = getAodElements();
+            const box = document.getElementById('aodDvdBox');
+            const box2 = document.getElementById('aodDvdBox2');
+            const overlay = document.getElementById('aodOverlay');
+            const timerEl = document.getElementById('aodTimer');
+            const timerEl2 = document.getElementById('aodTimer2');
+            const logEl = document.getElementById('aodLog');
+            const logEl2 = document.getElementById('aodLog2');
+
             aodLastTime = performance.now();
-            lastTimerUpdate = 0;
+            let lastTimerUpdate = 0;
 
             function animate(currentTime) {
-                if (!els.overlay.classList.contains('active')) return;
+                if (!overlay.classList.contains('active')) return;
 
-                // Calculate delta time
-                const deltaTime = Math.min((currentTime - aodLastTime) / 1000, 0.1); // cap at 100ms
+                // 计算帧间隔时间（秒）
+                const deltaTime = Math.min((currentTime - aodLastTime) / 1000, 0.1); // 限制最大deltaTime防止跳帧
                 aodLastTime = currentTime;
 
-                // Cache box dimensions (only measure once)
-                if (!aodBoxSize) {
-                    const boxRect = els.box.getBoundingClientRect();
-                    aodBoxSize = { width: boxRect.width, height: boxRect.height };
-                }
+                // 使用缓存的尺寸
+                const maxX = aodOverlaySize.width - aodBoxSize.width;
+                const maxY = aodOverlaySize.height - aodBoxSize.height;
 
-                const overlayWidth = window.innerWidth;
-                const overlayHeight = window.innerHeight;
-
-                // Update position (constant speed)
+                // 更新位置
                 aodPosition.x += aodVelocity.x * deltaTime;
                 aodPosition.y += aodVelocity.y * deltaTime;
 
-                // Bounce off edges
+                // 边界碰撞检测
                 let bounced = false;
-                const maxX = overlayWidth - aodBoxSize.width;
-                const maxY = overlayHeight - aodBoxSize.height;
-
                 if (aodPosition.x <= 0) {
                     aodPosition.x = 0;
                     aodVelocity.x = Math.abs(aodVelocity.x);
@@ -1849,27 +1905,34 @@
                     bounced = true;
                 }
 
-                // Change color on bounce (batch style updates)
+                // 碰撞时变色
                 if (bounced) {
                     aodColorIndex = (aodColorIndex + 1) % aodColors.length;
                     const newColor = aodColors[aodColorIndex];
-                    els.box.style.cssText = `
-                        transform: translate3d(${aodPosition.x}px, ${aodPosition.y}px, 0);
-                        border-color: ${newColor};
-                        box-shadow: 0 0 15px ${newColor}30;
-                    `;
-                    els.timer.style.color = newColor;
-                    els.timer.style.textShadow = `0 0 5px ${newColor}50`;
-                } else {
-                    // Only update transform (GPU accelerated)
-                    els.box.style.transform = `translate3d(${aodPosition.x}px, ${aodPosition.y}px, 0)`;
+                    const style = `border-color:${newColor};box-shadow:0 0 15px ${newColor}30`;
+                    const timerStyle = `color:${newColor};text-shadow:0 0 5px ${newColor}50`;
+                    box.style.cssText += style;
+                    timerEl.style.cssText = timerStyle;
+                    if (box2) { box2.style.cssText += style; }
+                    if (timerEl2) { timerEl2.style.cssText = timerStyle; }
                 }
 
-                // Update timer every 500ms to reduce work
+                // 使用GPU加速的transform移动（避免触发重排）
+                const transform = `translate3d(${aodPosition.x}px, ${aodPosition.y}px, 0)`;
+                box.style.transform = transform;
+                box.style.webkitTransform = transform;
+                if (box2) {
+                    box2.style.transform = transform;
+                    box2.style.webkitTransform = transform;
+                }
+
+                // 降低计时器更新频率（每500ms更新一次文字）
                 if (currentTime - lastTimerUpdate > 500) {
-                    updateAODTimer(els.timer);
-                    els.log.textContent = lastLogMessage || '等待日志...';
                     lastTimerUpdate = currentTime;
+                    updateAODTimer(timerEl, timerEl2);
+                    const logText = lastLogMessage || '等待日志...';
+                    logEl.textContent = logText;
+                    if (logEl2) logEl2.textContent = logText;
                 }
 
                 aodAnimationId = requestAnimationFrame(animate);
@@ -1879,7 +1942,7 @@
         }
 
         // Update Timer Display
-        function updateAODTimer(timerEl) {
+        function updateAODTimer(timerEl, timerEl2) {
             if (!requestStartTime) return;
 
             const elapsed = Date.now() - requestStartTime;
@@ -1887,23 +1950,27 @@
             const minutes = Math.floor(totalSeconds / 60);
             const seconds = totalSeconds % 60;
 
-            let timerStr;
-            if (minutes === 0) {
-                timerStr = `请求时间${seconds}秒`;
-            } else {
-                timerStr = `请求时间${minutes}分${seconds}秒`;
-            }
-            if (timerEl) {
-                timerEl.textContent = timerStr;
-            } else {
-                document.getElementById('aodTimer').textContent = timerStr;
-            }
+            const timerStr = minutes === 0
+                ? `请求时间${seconds}秒`
+                : `请求时间${minutes}分${seconds}秒`;
+
+            if (timerEl) timerEl.textContent = timerStr;
+            if (timerEl2) timerEl2.textContent = timerStr;
         }
 
         // Handle visibility change to reacquire wake lock
         document.addEventListener('visibilitychange', async () => {
             if (document.visibilityState === 'visible' && document.getElementById('aodOverlay').classList.contains('active')) {
                 await requestWakeLock();
+                // 重新获取尺寸
+                const overlay = document.getElementById('aodOverlay');
+                const box = document.getElementById('aodDvdBox');
+                if (overlay && box) {
+                    const overlayRect = overlay.getBoundingClientRect();
+                    const boxRect = box.getBoundingClientRect();
+                    aodOverlaySize = { width: overlayRect.width, height: overlayRect.height };
+                    aodBoxSize = { width: boxRect.width, height: boxRect.height };
+                }
             }
         });
 
@@ -1917,6 +1984,20 @@
         document.addEventListener('webkitfullscreenchange', () => {
             if (!document.webkitFullscreenElement && document.getElementById('aodOverlay').classList.contains('active')) {
                 exitAODMode();
+            }
+        });
+
+        // 窗口大小变化时更新缓存尺寸
+        window.addEventListener('resize', () => {
+            if (document.getElementById('aodOverlay').classList.contains('active')) {
+                const overlay = document.getElementById('aodOverlay');
+                const box = document.getElementById('aodDvdBox');
+                if (overlay && box) {
+                    const overlayRect = overlay.getBoundingClientRect();
+                    const boxRect = box.getBoundingClientRect();
+                    aodOverlaySize = { width: overlayRect.width, height: overlayRect.height };
+                    aodBoxSize = { width: boxRect.width, height: boxRect.height };
+                }
             }
         });
     </script>
