@@ -751,21 +751,20 @@
     </div>
 
     <!-- AOD Mode: Video Fullscreen with Canvas Overlay -->
-    <div class="aod-container" id="aodContainer"
-        style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:9999;">
+    <div class="aod-container" id="aodContainer" style="display:none;">
         <!-- 黑色视频 - 使用原生全屏以隐藏iOS状态栏 -->
         <video id="aodBlackVideo" playsinline webkit-playsinline muted loop preload="auto"
-            style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;">
+            style="position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#000;">
             <source src="黑.mp4" type="video/mp4">
         </video>
 
         <!-- Canvas叠加层用于绘制DVD动画 -->
         <canvas id="aodCanvas"
-            style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
+            style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
 
         <!-- 点击区域退出全屏 -->
         <div onclick="exitAODMode()"
-            style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;cursor:pointer;"></div>
+            style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:2;cursor:pointer;"></div>
     </div>
 
     <!-- 压缩对话框 -->
@@ -1643,42 +1642,25 @@
                 await video.play();
             } catch (e) { }
 
-            // 检测是否是iOS设备
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-            if (!isIOS) {
-                // 桌面端：请求容器全屏
-                try {
-                    if (container.requestFullscreen) {
-                        await container.requestFullscreen();
-                    } else if (container.webkitRequestFullscreen) {
-                        await container.webkitRequestFullscreen();
-                    }
-                    console.log('Container fullscreen requested (desktop)');
-                } catch (e) {
-                    console.log('Fullscreen failed:', e);
+            // 请求视频全屏（这是关键！视频全屏才能隐藏iOS状态栏）
+            try {
+                if (video.requestFullscreen) {
+                    await video.requestFullscreen();
+                } else if (video.webkitRequestFullscreen) {
+                    await video.webkitRequestFullscreen();
+                } else if (video.webkitEnterFullscreen) {
+                    // iOS Safari
+                    video.webkitEnterFullscreen();
                 }
-            } else {
-                // iOS端：不使用fullscreen API，容器已经是fixed全屏
-                // 添加iOS特定样式确保正确显示
-                container.style.position = 'fixed';
-                container.style.top = '0';
-                container.style.left = '0';
-                container.style.width = '100vw';
-                container.style.height = '100vh';
-                container.style.zIndex = '99999';
-                document.body.style.overflow = 'hidden';
-                console.log('iOS detected, using fixed positioning');
-            }
+            } catch (e) { }
 
             // Request wake lock
             await requestWakeLock();
 
             // 重置位置并开始canvas动画
             aodPosition = {
-                x: Math.random() * Math.max(50, canvasWidth - 300),
-                y: Math.random() * Math.max(50, canvasHeight - 130)
+                x: Math.random() * (canvasWidth - 250),
+                y: Math.random() * (canvasHeight - 100)
             };
             startCanvasDVDAnimation();
         }
@@ -1707,9 +1689,6 @@
 
             // 暂停视频
             video.pause();
-
-            // 恢复body样式（iOS需要）
-            document.body.style.overflow = '';
 
             // 隐藏容器
             container.style.display = 'none';
