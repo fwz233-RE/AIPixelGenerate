@@ -1721,24 +1721,32 @@
 
                 // 样式设置：不可见但位于视口内（关键！）
                 // iOS Safari 不会播放 display:none 或 visibility:hidden 的视频
-                // 所以我们将其设为透明且极小，放在视口边缘
+                // 必须都在视口(0,0)范围内，不能是负坐标
                 Object.assign(noSleepVideo.style, {
-                    position: 'absolute',
+                    position: 'fixed', // 使用fixed防止滚动移出
                     width: '1px',
                     height: '1px',
-                    left: '-10px',  // 移出可视区域但仍在文档流中
-                    top: '-10px',
-                    opacity: '0.01',
+                    left: '0',
+                    top: '0',
+                    opacity: '0.05', // 稍微增加不透明度防止被系统优化
                     pointerEvents: 'none',
-                    zIndex: '-1000'
+                    zIndex: '-2147483648' // 最底层
                 });
 
                 document.body.appendChild(noSleepVideo);
 
+                // 添加 Web App Manifest 以尝试优化全屏体验
+                if (!document.querySelector('link[rel="manifest"]')) {
+                    const manifestLink = document.createElement('link');
+                    manifestLink.rel = 'manifest';
+                    manifestLink.href = 'data:application/manifest+json;charset=utf-8,{"name":"AI图像生成器","short_name":"AI生成","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000"}';
+                    document.head.appendChild(manifestLink);
+                }
+
                 // 尝试播放 (必须在用户交互中调用)
                 await noSleepVideo.play();
                 noSleepVideoInitialized = true;
-                console.log('✅ 视频防息屏已激活 (NoSleep.js内核)');
+                console.log('✅ 视频防息屏已激活 (NoSleep.js内核 - 视口内模式)');
 
             } catch (e) {
                 console.error('❌ 视频防息屏初始化失败:', e);
