@@ -751,20 +751,21 @@
     </div>
 
     <!-- AOD Mode: Video Fullscreen with Canvas Overlay -->
-    <div class="aod-container" id="aodContainer" style="display:none;">
+    <div class="aod-container" id="aodContainer"
+        style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:9999;">
         <!-- 黑色视频 - 使用原生全屏以隐藏iOS状态栏 -->
         <video id="aodBlackVideo" playsinline webkit-playsinline muted loop preload="auto"
-            style="position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#000;">
+            style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;">
             <source src="黑.mp4" type="video/mp4">
         </video>
 
         <!-- Canvas叠加层用于绘制DVD动画 -->
         <canvas id="aodCanvas"
-            style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
+            style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
 
         <!-- 点击区域退出全屏 -->
         <div onclick="exitAODMode()"
-            style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:2;cursor:pointer;"></div>
+            style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;cursor:pointer;"></div>
     </div>
 
     <!-- 压缩对话框 -->
@@ -1642,25 +1643,28 @@
                 await video.play();
             } catch (e) { }
 
-            // 请求视频全屏（这是关键！视频全屏才能隐藏iOS状态栏）
+            // 请求容器全屏（关键！让整个容器全屏，canvas才能显示）
             try {
-                if (video.requestFullscreen) {
-                    await video.requestFullscreen();
-                } else if (video.webkitRequestFullscreen) {
-                    await video.webkitRequestFullscreen();
-                } else if (video.webkitEnterFullscreen) {
-                    // iOS Safari
-                    video.webkitEnterFullscreen();
+                if (container.requestFullscreen) {
+                    await container.requestFullscreen();
+                } else if (container.webkitRequestFullscreen) {
+                    await container.webkitRequestFullscreen();
+                } else if (container.webkitEnterFullscreen) {
+                    // iOS Safari fallback
+                    container.webkitEnterFullscreen();
                 }
-            } catch (e) { }
+                console.log('Container fullscreen requested');
+            } catch (e) {
+                console.log('Fullscreen failed:', e);
+            }
 
             // Request wake lock
             await requestWakeLock();
 
             // 重置位置并开始canvas动画
             aodPosition = {
-                x: Math.random() * (canvasWidth - 250),
-                y: Math.random() * (canvasHeight - 100)
+                x: Math.random() * Math.max(50, canvasWidth - 300),
+                y: Math.random() * Math.max(50, canvasHeight - 130)
             };
             startCanvasDVDAnimation();
         }
