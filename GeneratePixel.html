@@ -1663,6 +1663,7 @@
         let isRequestInProgress = false;
         let originalThemeColor = null;
         let noSleepVideoInitialized = false;
+        let isVideoPlayingForRequest = false;
 
         async function initNoSleepVideo() {
             if (noSleepVideoInitialized && noSleepVideo) return;
@@ -1674,31 +1675,31 @@
                 noSleepVideo.muted = true;
                 noSleepVideo.loop = true;
 
-                // 设置一个透明的1x1像素视频
+                // 设置一个透明的2x2像素视频
                 const canvas = document.createElement('canvas');
-                canvas.width = 1;
-                canvas.height = 1;
+                canvas.width = 2;
+                canvas.height = 2;
                 const ctx = canvas.getContext('2d');
                 ctx.fillStyle = 'black';
-                ctx.fillRect(0, 0, 1, 1);
+                ctx.fillRect(0, 0, 2, 2);
                 const stream = canvas.captureStream();
                 noSleepVideo.srcObject = stream;
 
-                // 隐藏视频
+                // 将视频放在右下角，极低透明度但仍在视口内
                 noSleepVideo.style.position = 'fixed';
-                noSleepVideo.style.top = '-9999px';
-                noSleepVideo.style.left = '-9999px';
-                noSleepVideo.style.width = '1px';
-                noSleepVideo.style.height = '1px';
-                noSleepVideo.style.opacity = '0';
+                noSleepVideo.style.bottom = '0';
+                noSleepVideo.style.right = '0';
+                noSleepVideo.style.width = '2px';
+                noSleepVideo.style.height = '2px';
+                noSleepVideo.style.opacity = '0.01';
                 noSleepVideo.style.pointerEvents = 'none';
+                noSleepVideo.style.zIndex = '-1';
                 document.body.appendChild(noSleepVideo);
 
-                // 在用户交互期间立即播放（然后暂停）
+                // 在用户交互期间立即播放并持续播放
                 await noSleepVideo.play();
-                noSleepVideo.pause();
                 noSleepVideoInitialized = true;
-                console.log('视频防息屏预初始化完成');
+                console.log('视频防息屏预初始化并开始播放');
             } catch (e) {
                 console.error('视频防息屏初始化失败:', e);
                 // 如果播放失败，尝试使用一个真实的视频源
@@ -1708,9 +1709,8 @@
                         noSleepVideo.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAKxtZGF0AAAAsAAAAF4AAAIAAQABABAABAAXAAEAAgACAAUABAAAAAIAAAAAAB9pbHN0AAAA8AAAACxpbmVmAAAARAAAAB5pbmVsIAAAAEQAAAAIc3RibAAAAJwAAACEc3RzZAAAAJwAAAAYbXA0MQAAABQAAAAgbWRhdAAAAKwAAAAY';
                         noSleepVideo.load();
                         await noSleepVideo.play();
-                        noSleepVideo.pause();
                         noSleepVideoInitialized = true;
-                        console.log('备用视频防息屏预初始化完成');
+                        console.log('备用视频防息屏预初始化并开始播放');
                     } catch (e2) {
                         console.error('备用视频也失败:', e2);
                     }
@@ -1868,6 +1868,12 @@
             // 如果请求已完成，更新状态
             if (requestCompleted) {
                 isRequestInProgress = false;
+                // 请求完成，停止视频防息屏
+                isVideoPlayingForRequest = false;
+                if (noSleepVideo) {
+                    noSleepVideo.pause();
+                    console.log('视频防息屏已暂停（请求完成）');
+                }
             }
         }
 
@@ -1978,10 +1984,10 @@
                     console.log('屏幕唤醒锁定已释放');
                 });
             }
-            if (noSleepVideo) {
+            if (noSleepVideo && !isVideoPlayingForRequest) {
                 noSleepVideo.pause();
                 // 不清除视频，以便重新播放
-                console.log('视频防息屏已暂停');
+                console.log('视频防息屏已暂停（非请求期间）');
             }
         }
 
@@ -2010,6 +2016,12 @@
 
             // 预初始化视频防息屏（在用户交互期间）
             initNoSleepVideo().catch(() => {});
+            // 设置视频防息屏为请求模式
+            isVideoPlayingForRequest = true;
+            // 确保视频在播放
+            if (noSleepVideo && noSleepVideo.paused) {
+                noSleepVideo.play().catch(e => console.error('视频播放失败:', e));
+            }
 
             // 设置请求状态
             requestStartTime = Date.now();
