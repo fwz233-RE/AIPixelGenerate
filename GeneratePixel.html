@@ -89,6 +89,8 @@
             border-radius: 6px;
             font-size: 14px;
             transition: border-color 0.3s;
+            box-sizing: border-box;
+            width: 100%;
         }
 
         input:focus,
@@ -647,15 +649,110 @@
         }
 
         @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                padding: 15px;
+            }
+
             .config-section {
                 grid-template-columns: 1fr;
+                gap: 15px;
             }
 
             .full-width {
                 grid-column: span 1;
             }
+
+            input[type="text"],
+            input[type="password"],
+            textarea {
+                padding: 10px;
+                font-size: 16px; /* 防止iOS缩放 */
+                box-sizing: border-box;
+                width: 100%;
+            }
+
+            h1 {
+                font-size: 1.5em;
+            }
+
+            .upload-area {
+                min-height: 120px;
+            }
+
+            .log-panel {
+                height: 120px;
+                font-size: 11px;
+            }
+
+            .aod-text-block {
+                font-size: 16px;
+                padding: 8px;
+            }
+        }
+
+        /* 针对超小屏幕的优化 */
+        @media (max-width: 400px) {
+            body {
+                padding: 5px;
+            }
+
+            .container {
+                padding: 10px;
+            }
+
+            .config-section {
+                gap: 10px;
+            }
+
+            input[type="text"],
+            input[type="password"],
+            textarea {
+                padding: 8px;
+            }
+        }
+
+        /* AOD 模式样式 */
+        .aod-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #000000;
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Courier New', monospace;
+            color: #00ff00;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .aod-text-block {
+            position: absolute;
+            white-space: pre;
+            font-size: 20px;
+            line-height: 1.2;
+            text-shadow: 0 0 5px #00ff00;
+            padding: 10px;
+            border: 1px solid #00ff00;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 4px;
         }
     </style>
+
+    <!-- PWA 和图标配置 -->
+    <link rel="icon" href="icon.PNG" type="image/png">
+    <link rel="apple-touch-icon" href="icon.PNG">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#4a90e2">
+    <link rel="manifest" href="manifest.json">
 </head>
 
 <body>
@@ -1381,6 +1478,189 @@
             consoleEl.scrollTop = consoleEl.scrollHeight;
         }
 
+        // AOD 模式相关函数
+        let aodTimeoutId = null;
+        let aodOverlay = null;
+        let aodTextBlock = null;
+        let aodAnimationId = null;
+        let wakeLock = null;
+        let noSleepVideo = null;
+        let requestStartTime = null;
+        let isRequestInProgress = false;
+
+        function enterAODMode() {
+            // 防止重复进入
+            if (document.querySelector('.aod-overlay')) return;
+
+            // 如果请求未进行中，不进入AOD模式
+            if (!isRequestInProgress) return;
+
+            // 获取最新日志
+            const consoleEl = document.getElementById('logConsole');
+            const logItems = consoleEl.querySelectorAll('div');
+            if (logItems.length === 0) return;
+
+            const lastLog = logItems[logItems.length - 1];
+            const logText = lastLog.textContent || lastLog.innerText;
+
+            // 解析时间标识和消息
+            const timeMatch = logText.match(/^\[(.*?)\]\s*(.*)/);
+            if (!timeMatch) return;
+
+            const timePart = `[${timeMatch[1]}] `;
+            const message = timeMatch[2];
+            const width = timePart.length; // 字符宽度
+
+            // 将消息按宽度换行成矩形块
+            let lines = [];
+            for (let i = 0; i < message.length; i += width) {
+                lines.push(message.substring(i, i + width));
+            }
+            // 确保矩形高度至少为3行
+            while (lines.length < 3) {
+                lines.push(' '.repeat(width));
+            }
+            // 确保每行宽度一致
+            lines = lines.map(line => line.padEnd(width, ' '));
+
+            const blockText = lines.join('\n');
+
+            // 创建覆盖层
+            aodOverlay = document.createElement('div');
+            aodOverlay.className = 'aod-overlay';
+            aodTextBlock = document.createElement('div');
+            aodTextBlock.className = 'aod-text-block';
+            aodTextBlock.textContent = blockText;
+            aodOverlay.appendChild(aodTextBlock);
+            document.body.appendChild(aodOverlay);
+
+            // 启动DVD动画
+            startDVDAnimation(aodTextBlock);
+
+            // 添加点击事件：退出AOD模式并重新启动检测
+            aodOverlay.addEventListener('click', function() {
+                exitAODMode();
+                // 如果请求还在进行中，重新启动5秒检测
+                if (isRequestInProgress) {
+                    const elapsed = Date.now() - requestStartTime;
+                    let remaining = Math.max(0, 5000 - elapsed);
+                    // 确保至少有2秒的间隔，避免立即重新进入
+                    if (remaining < 2000) {
+                        remaining = 2000;
+                    }
+                    aodTimeoutId = setTimeout(() => {
+                        enterAODMode();
+                    }, remaining);
+                }
+            });
+
+            // 阻止息屏
+            preventScreenSleep();
+        }
+
+        function exitAODMode(requestCompleted = false) {
+            // 清除定时器
+            if (aodTimeoutId) {
+                clearTimeout(aodTimeoutId);
+                aodTimeoutId = null;
+            }
+
+            // 停止动画
+            if (aodAnimationId) {
+                cancelAnimationFrame(aodAnimationId);
+                aodAnimationId = null;
+            }
+
+            // 移除覆盖层
+            if (aodOverlay && aodOverlay.parentNode) {
+                aodOverlay.parentNode.removeChild(aodOverlay);
+                aodOverlay = null;
+                aodTextBlock = null;
+            }
+
+            // 允许息屏
+            allowScreenSleep();
+
+            // 如果请求已完成，更新状态
+            if (requestCompleted) {
+                isRequestInProgress = false;
+            }
+        }
+
+        function startDVDAnimation(element) {
+            const rect = element.getBoundingClientRect();
+            let x = Math.random() * (window.innerWidth - rect.width);
+            let y = Math.random() * (window.innerHeight - rect.height);
+            let dx = 2;
+            let dy = 2;
+
+            function animate() {
+                x += dx;
+                y += dy;
+
+                // 边界碰撞检测
+                if (x <= 0 || x + rect.width >= window.innerWidth) {
+                    dx = -dx;
+                    // 轻微随机化角度
+                    dy += (Math.random() - 0.5) * 0.5;
+                }
+                if (y <= 0 || y + rect.height >= window.innerHeight) {
+                    dy = -dy;
+                    dx += (Math.random() - 0.5) * 0.5;
+                }
+
+                // 限制速度
+                const speed = Math.sqrt(dx*dx + dy*dy);
+                if (speed > 5) {
+                    dx = dx / speed * 3;
+                    dy = dy / speed * 3;
+                }
+
+                element.style.left = `${x}px`;
+                element.style.top = `${y}px`;
+
+                aodAnimationId = requestAnimationFrame(animate);
+            }
+
+            element.style.position = 'absolute';
+            element.style.left = `${x}px`;
+            element.style.top = `${y}px`;
+
+            aodAnimationId = requestAnimationFrame(animate);
+        }
+
+        async function preventScreenSleep() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('屏幕唤醒锁定已激活');
+                } catch (err) {
+                    console.error(`唤醒锁定失败: ${err.message}`);
+                }
+            }
+            // 其他平台的备用方案
+            // iOS/Android: 通常通过添加到主屏幕(PWA)或WebView设置支持
+            // Windows/Mac: 依赖浏览器支持
+        }
+
+        function allowScreenSleep() {
+            if (wakeLock) {
+                wakeLock.release().then(() => {
+                    wakeLock = null;
+                    console.log('屏幕唤醒锁定已释放');
+                });
+            }
+            if (noSleepVideo) {
+                noSleepVideo.pause();
+                noSleepVideo.srcObject = null;
+                if (noSleepVideo.parentNode) {
+                    noSleepVideo.parentNode.removeChild(noSleepVideo);
+                }
+                noSleepVideo = null;
+                console.log('视频防息屏已释放');
+            }
+        }
+
         async function generateImage() {
             const baseUrl = document.getElementById('baseUrl').value.replace(/\/+$/, "");
             const apiKey = document.getElementById('apiKey').value.trim();
@@ -1403,6 +1683,10 @@
             phText.style.display = 'none';
             resultImg.style.display = 'none';
             loopBtn.style.display = 'none';
+
+            // 设置请求状态
+            requestStartTime = Date.now();
+            isRequestInProgress = true;
 
             try {
                 let url, payload;
@@ -1450,6 +1734,11 @@
 
                 log(`发送 POST 请求...`);
 
+                // 设置5秒超时，进入AOD模式
+                aodTimeoutId = setTimeout(() => {
+                    enterAODMode();
+                }, 5000);
+
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: {
@@ -1460,6 +1749,12 @@
                 });
 
                 const data = await response.json();
+
+                // 清除AOD定时器
+                if (aodTimeoutId) {
+                    clearTimeout(aodTimeoutId);
+                    aodTimeoutId = null;
+                }
 
                 if (!response.ok) {
                     log("API 返回错误信息: " + JSON.stringify(data), 'error');
@@ -1486,6 +1781,7 @@
                         log(content, 'warn');
                         phText.innerText = "模型未返回图片链接";
                         phText.style.display = 'block';
+                        exitAODMode(true);
                     }
                 }
 
@@ -1502,24 +1798,34 @@
                         // --- 新增：调用播放声音函数 ---
                         playCompletionSound();
                         // -------------------------
+                        exitAODMode(true);
                     };
                     resultImg.onerror = () => {
                         log("❌ 图片加载失败", 'error');
                         spinner.style.display = 'none';
                         btn.disabled = false;
                         btn.innerText = "🚀 开始生成图片";
+                        exitAODMode(true);
                     };
                 } else if (!phText.style.display || phText.style.display === 'none') {
                     spinner.style.display = 'none';
                     btn.disabled = false;
                     btn.innerText = "🚀 开始生成图片";
+                    exitAODMode(true);
                 } else {
                     spinner.style.display = 'none';
                     btn.disabled = false;
                     btn.innerText = "🚀 开始生成图片";
+                    exitAODMode(true);
                 }
 
             } catch (error) {
+                // 清除AOD定时器并退出AOD模式
+                if (aodTimeoutId) {
+                    clearTimeout(aodTimeoutId);
+                    aodTimeoutId = null;
+                }
+                exitAODMode(true);
                 log(`❌ 执行出错: ${error.message}`, 'error');
                 spinner.style.display = 'none';
                 btn.disabled = false;
