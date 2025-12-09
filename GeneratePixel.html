@@ -16,6 +16,16 @@
             --border-color: #ddd;
         }
 
+        html {
+            height: 100%;
+            /* 支持iOS安全区域 */
+            padding-top: env(safe-area-inset-top, 0px);
+            padding-left: env(safe-area-inset-left, 0px);
+            padding-right: env(safe-area-inset-right, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--bg-color);
@@ -888,7 +898,7 @@
     <link rel="icon" href="icon.PNG" type="image/png">
     <link rel="apple-touch-icon" href="icon.PNG">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="theme-color" content="#4a90e2">
     <link rel="manifest" href="manifest.json">
 </head>
@@ -1664,6 +1674,9 @@
         let originalThemeColor = null;
         let noSleepVideoInitialized = false;
         let isVideoPlayingForRequest = false;
+        let keepAwakeAudioContext = null;
+        let videoCheckIntervalId = null;
+        let videoAnimationFrameId = null;
 
         async function initNoSleepVideo() {
             if (noSleepVideoInitialized && noSleepVideo) return;
@@ -1682,7 +1695,36 @@
                 const ctx = canvas.getContext('2d');
                 ctx.fillStyle = 'black';
                 ctx.fillRect(0, 0, 2, 2);
-                const stream = canvas.captureStream();
+
+                // 创建带有音频轨道的MediaStream以提高iOS兼容性
+                let stream;
+                try {
+                    // 尝试创建带有音频轨道的流
+                    const canvasStream = canvas.captureStream();
+                    if (typeof MediaStream !== 'undefined' && 'getAudioTracks' in canvasStream) {
+                        // 如果支持，添加一个静音音频轨道
+                        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        const oscillator = audioContext.createOscillator();
+                        const destination = audioContext.createMediaStreamDestination();
+                        oscillator.connect(destination);
+                        oscillator.start();
+
+                        // 合并视频和音频轨道
+                        const audioTrack = destination.stream.getAudioTracks()[0];
+                        const videoTrack = canvasStream.getVideoTracks()[0];
+                        stream = new MediaStream([videoTrack, audioTrack]);
+
+                        // 立即关闭音频上下文以避免占用资源
+                        oscillator.stop();
+                        audioContext.close();
+                    } else {
+                        stream = canvasStream;
+                    }
+                } catch (e) {
+                    // 回退到原始canvas流
+                    stream = canvas.captureStream();
+                }
+
                 noSleepVideo.srcObject = stream;
 
                 // 将视频放在右下角，极低透明度但仍在视口内
@@ -1691,9 +1733,10 @@
                 noSleepVideo.style.right = '0';
                 noSleepVideo.style.width = '2px';
                 noSleepVideo.style.height = '2px';
-                noSleepVideo.style.opacity = '0.01';
+                noSleepVideo.style.opacity = '0.001'; // 更低的透明度
                 noSleepVideo.style.pointerEvents = 'none';
-                noSleepVideo.style.zIndex = '-1';
+                noSleepVideo.style.zIndex = '-9999';
+                noSleepVideo.style.visibility = 'hidden'; // 完全隐藏但仍在DOM中
                 document.body.appendChild(noSleepVideo);
 
                 // 在用户交互期间立即播放并持续播放
@@ -1951,6 +1994,7 @@
         }
 
         async function preventScreenSleep() {
+            // 方法1: 使用Wake Lock API（如果可用）
             if ('wakeLock' in navigator) {
                 try {
                     wakeLock = await navigator.wakeLock.request('screen');
@@ -1958,21 +2002,60 @@
                 } catch (err) {
                     console.error(`唤醒锁定失败: ${err.message}`);
                 }
-            } else {
-                // iOS等不支持Wake Lock的平台，使用视频防息屏
-                try {
-                    // 如果视频未初始化，先初始化
-                    if (!noSleepVideoInitialized || !noSleepVideo) {
-                        await initNoSleepVideo();
-                    }
+            }
 
-                    // 播放已初始化的视频
-                    if (noSleepVideo) {
-                        await noSleepVideo.play();
-                        console.log('视频防息屏已激活');
+            // 方法2: 视频防息屏（iOS等不支持Wake Lock的平台）
+            try {
+                // 如果视频未初始化，先初始化
+                if (!noSleepVideoInitialized || !noSleepVideo) {
+                    await initNoSleepVideo();
+                }
+
+                // 播放已初始化的视频
+                if (noSleepVideo) {
+                    await noSleepVideo.play();
+                    console.log('视频防息屏已激活');
+
+                    // 清除已有的定时器
+                    if (videoCheckIntervalId) {
+                        clearInterval(videoCheckIntervalId);
                     }
+                    // 设置定时器定期检查视频状态
+                    videoCheckIntervalId = setInterval(() => {
+                        if (noSleepVideo && noSleepVideo.paused) {
+                            console.log('视频已暂停，重新播放');
+                            noSleepVideo.play().catch(e => console.error('视频重新播放失败:', e));
+                        }
+                    }, 3000); // 每3秒检查一次
+
+                    // 使用requestAnimationFrame进行更频繁的状态检查（针对iOS）
+                    function checkVideoAnimationFrame() {
+                        if (noSleepVideo && noSleepVideo.paused) {
+                            console.log('视频暂停（动画帧检测），重新播放');
+                            noSleepVideo.play().catch(e => console.error('视频重新播放失败（动画帧）:', e));
+                        }
+                        videoAnimationFrameId = requestAnimationFrame(checkVideoAnimationFrame);
+                    }
+                    videoAnimationFrameId = requestAnimationFrame(checkVideoAnimationFrame);
+                }
+            } catch (e) {
+                console.error('视频防息屏播放失败:', e);
+            }
+
+            // 方法3: Web Audio API防息屏（iOS/Safari）
+            if (!keepAwakeAudioContext && window.AudioContext) {
+                try {
+                    keepAwakeAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    // 创建静音音频源
+                    const oscillator = keepAwakeAudioContext.createOscillator();
+                    const gainNode = keepAwakeAudioContext.createGain();
+                    gainNode.gain.value = 0; // 完全静音
+                    oscillator.connect(gainNode);
+                    gainNode.connect(keepAwakeAudioContext.destination);
+                    oscillator.start();
+                    console.log('音频防息屏已激活');
                 } catch (e) {
-                    console.error('视频防息屏播放失败:', e);
+                    console.error('音频防息屏初始化失败:', e);
                 }
             }
         }
@@ -1988,6 +2071,28 @@
                 noSleepVideo.pause();
                 // 不清除视频，以便重新播放
                 console.log('视频防息屏已暂停（非请求期间）');
+            }
+            // 清除视频检查定时器
+            if (videoCheckIntervalId) {
+                clearInterval(videoCheckIntervalId);
+                videoCheckIntervalId = null;
+                console.log('视频检查定时器已清除');
+            }
+            // 清除视频动画帧
+            if (videoAnimationFrameId) {
+                cancelAnimationFrame(videoAnimationFrameId);
+                videoAnimationFrameId = null;
+                console.log('视频动画帧检查已清除');
+            }
+            // 关闭音频上下文
+            if (keepAwakeAudioContext) {
+                keepAwakeAudioContext.close().then(() => {
+                    keepAwakeAudioContext = null;
+                    console.log('音频防息屏已释放');
+                }).catch(e => {
+                    console.error('音频上下文关闭失败:', e);
+                    keepAwakeAudioContext = null;
+                });
             }
         }
 
