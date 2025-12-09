@@ -3,7 +3,15 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    <!-- iOS PWA 全屏配置 - 隐藏状态栏 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AI图像生成器">
+    <meta name="theme-color" content="#4a90e2">
+    <!-- 防止 iOS Safari 文字选择和长按菜单 -->
+    <meta name="format-detection" content="telephone=no">
     <title>AI 图像生成器 Pro (多图版)</title>
     <style>
         :root {
@@ -680,7 +688,8 @@
             input[type="password"],
             textarea {
                 padding: 10px;
-                font-size: 16px; /* 防止iOS缩放 */
+                font-size: 16px;
+                /* 防止iOS缩放 */
                 box-sizing: border-box;
                 width: 100%;
             }
@@ -1858,7 +1867,7 @@
             startDVDAnimation(aodTextBlock);
 
             // 添加点击事件：退出AOD模式并重新启动检测
-            aodOverlay.addEventListener('click', function() {
+            aodOverlay.addEventListener('click', function () {
                 exitAODMode();
                 // 如果请求还在进行中，重新启动5秒检测
                 if (isRequestInProgress) {
@@ -1984,7 +1993,7 @@
                     const angleChange = (Math.random() - 0.5) * 0.2; // 小角度变化
                     const currentAngle = Math.atan2(vy, vx);
                     const newAngle = currentAngle + angleChange;
-                    const currentSpeed = Math.sqrt(vx*vx + vy*vy);
+                    const currentSpeed = Math.sqrt(vx * vx + vy * vy);
                     vx = Math.cos(newAngle) * currentSpeed;
                     vy = Math.sin(newAngle) * currentSpeed;
                 }
@@ -2141,7 +2150,7 @@
             loopBtn.style.display = 'none';
 
             // 预初始化视频防息屏（在用户交互期间）
-            initNoSleepVideo().catch(() => {});
+            initNoSleepVideo().catch(() => { });
             // 设置视频防息屏为请求模式
             isVideoPlayingForRequest = true;
             // 确保视频在播放
