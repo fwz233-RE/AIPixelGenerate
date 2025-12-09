@@ -1741,6 +1741,9 @@
             const container = document.getElementById('aodContainer');
             const video = document.getElementById('aodBlackVideo');
 
+            // 显示容器
+            container.style.display = 'block';
+
             // 播放视频
             try {
                 await video.play();
@@ -1782,6 +1785,9 @@
             // 暂停视频
             video.pause();
 
+            // 隐藏容器
+            container.style.display = 'none';
+
             // Release wake lock
             await releaseWakeLock();
         }
@@ -1789,20 +1795,23 @@
 
         // Handle visibility change to reacquire wake lock
         document.addEventListener('visibilitychange', async () => {
-            if (document.visibilityState === 'visible' && document.getElementById('aodOverlay').classList.contains('active')) {
+            const aodContainer = document.getElementById('aodContainer');
+            if (document.visibilityState === 'visible' && aodContainer && aodContainer.style.display !== 'none') {
                 await requestWakeLock();
             }
         });
 
-        // Handle fullscreen change
+        // Handle fullscreen change - 当全屏退出时自动隐藏黑色层
         document.addEventListener('fullscreenchange', () => {
-            if (!document.fullscreenElement && document.getElementById('aodOverlay').classList.contains('active')) {
+            const aodContainer = document.getElementById('aodContainer');
+            if (!document.fullscreenElement && aodContainer && aodContainer.style.display !== 'none') {
                 exitAODMode();
             }
         });
 
         document.addEventListener('webkitfullscreenchange', () => {
-            if (!document.webkitFullscreenElement && document.getElementById('aodOverlay').classList.contains('active')) {
+            const aodContainer = document.getElementById('aodContainer');
+            if (!document.webkitFullscreenElement && aodContainer && aodContainer.style.display !== 'none') {
                 exitAODMode();
             }
         });
