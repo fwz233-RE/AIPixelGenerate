@@ -835,10 +835,10 @@
         /* AOD 模式样式 */
         .aod-overlay {
             position: fixed;
-            top: calc(-1 * env(safe-area-inset-top, 0px));
-            left: calc(-1 * env(safe-area-inset-left, 0px));
-            right: calc(-1 * env(safe-area-inset-right, 0px));
-            bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+            top: -100px;
+            left: -100px;
+            right: -100px;
+            bottom: -100px;
             background-color: #000000;
             z-index: 9999;
             display: flex;
@@ -884,7 +884,7 @@
     <link rel="icon" href="icon.PNG" type="image/png">
     <link rel="apple-touch-icon" href="icon.PNG">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="theme-color" content="#4a90e2">
     <link rel="manifest" href="manifest.json">
 </head>
@@ -1658,6 +1658,61 @@
         let requestStartTime = null;
         let isRequestInProgress = false;
         let originalThemeColor = null;
+        let noSleepVideoInitialized = false;
+
+        async function initNoSleepVideo() {
+            if (noSleepVideoInitialized && noSleepVideo) return;
+
+            try {
+                noSleepVideo = document.createElement('video');
+                noSleepVideo.setAttribute('playsinline', '');
+                noSleepVideo.setAttribute('webkit-playsinline', '');
+                noSleepVideo.muted = true;
+                noSleepVideo.loop = true;
+
+                // 设置一个透明的1x1像素视频
+                const canvas = document.createElement('canvas');
+                canvas.width = 1;
+                canvas.height = 1;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, 1, 1);
+                const stream = canvas.captureStream();
+                noSleepVideo.srcObject = stream;
+
+                // 隐藏视频
+                noSleepVideo.style.position = 'fixed';
+                noSleepVideo.style.top = '-9999px';
+                noSleepVideo.style.left = '-9999px';
+                noSleepVideo.style.width = '1px';
+                noSleepVideo.style.height = '1px';
+                noSleepVideo.style.opacity = '0';
+                noSleepVideo.style.pointerEvents = 'none';
+                document.body.appendChild(noSleepVideo);
+
+                // 在用户交互期间立即播放（然后暂停）
+                await noSleepVideo.play();
+                noSleepVideo.pause();
+                noSleepVideoInitialized = true;
+                console.log('视频防息屏预初始化完成');
+            } catch (e) {
+                console.error('视频防息屏初始化失败:', e);
+                // 如果播放失败，尝试使用一个真实的视频源
+                if (noSleepVideo) {
+                    try {
+                        noSleepVideo.srcObject = null;
+                        noSleepVideo.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAKxtZGF0AAAAsAAAAF4AAAIAAQABABAABAAXAAEAAgACAAUABAAAAAIAAAAAAB9pbHN0AAAA8AAAACxpbmVmAAAARAAAAB5pbmVsIAAAAEQAAAAIc3RibAAAAJwAAACEc3RzZAAAAJwAAAAYbXA0MQAAABQAAAAgbWRhdAAAAKwAAAAY';
+                        noSleepVideo.load();
+                        await noSleepVideo.play();
+                        noSleepVideo.pause();
+                        noSleepVideoInitialized = true;
+                        console.log('备用视频防息屏预初始化完成');
+                    } catch (e2) {
+                        console.error('备用视频也失败:', e2);
+                    }
+                }
+            }
+        }
 
         function enterAODMode() {
             // 防止重复进入
@@ -1894,46 +1949,18 @@
             } else {
                 // iOS等不支持Wake Lock的平台，使用视频防息屏
                 try {
-                    noSleepVideo = document.createElement('video');
-                    noSleepVideo.setAttribute('playsinline', '');
-                    noSleepVideo.setAttribute('webkit-playsinline', '');
-                    noSleepVideo.muted = true;
-                    noSleepVideo.loop = true;
-                    // 设置一个透明的1x1像素视频
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 1;
-                    canvas.height = 1;
-                    const ctx = canvas.getContext('2d');
-                    ctx.fillStyle = 'black';
-                    ctx.fillRect(0, 0, 1, 1);
-                    const stream = canvas.captureStream();
-                    noSleepVideo.srcObject = stream;
-
-                    // 隐藏视频
-                    noSleepVideo.style.position = 'fixed';
-                    noSleepVideo.style.top = '-9999px';
-                    noSleepVideo.style.left = '-9999px';
-                    noSleepVideo.style.width = '1px';
-                    noSleepVideo.style.height = '1px';
-                    noSleepVideo.style.opacity = '0';
-                    noSleepVideo.style.pointerEvents = 'none';
-                    document.body.appendChild(noSleepVideo);
-
-                    // 尝试播放
-                    const playPromise = noSleepVideo.play();
-                    if (playPromise !== undefined) {
-                        playPromise.catch(e => {
-                            console.error('视频防息屏播放失败:', e);
-                            // 如果播放失败，尝试使用一个真实的视频源
-                            noSleepVideo.srcObject = null;
-                            noSleepVideo.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAKxtZGF0AAAAsAAAAF4AAAIAAQABABAABAAXAAEAAgACAAUABAAAAAIAAAAAAB9pbHN0AAAA8AAAACxpbmVmAAAARAAAAB5pbmVsIAAAAEQAAAAIc3RibAAAAJwAAACEc3RzZAAAAJwAAAAYbXA0MQAAABQAAAAgbWRhdAAAAKwAAAAY';
-                            noSleepVideo.load();
-                            noSleepVideo.play().catch(e2 => console.error('备用视频播放也失败:', e2));
-                        });
+                    // 如果视频未初始化，先初始化
+                    if (!noSleepVideoInitialized || !noSleepVideo) {
+                        await initNoSleepVideo();
                     }
-                    console.log('视频防息屏已激活');
+
+                    // 播放已初始化的视频
+                    if (noSleepVideo) {
+                        await noSleepVideo.play();
+                        console.log('视频防息屏已激活');
+                    }
                 } catch (e) {
-                    console.error('视频防息屏初始化失败:', e);
+                    console.error('视频防息屏播放失败:', e);
                 }
             }
         }
@@ -1947,12 +1974,8 @@
             }
             if (noSleepVideo) {
                 noSleepVideo.pause();
-                noSleepVideo.srcObject = null;
-                if (noSleepVideo.parentNode) {
-                    noSleepVideo.parentNode.removeChild(noSleepVideo);
-                }
-                noSleepVideo = null;
-                console.log('视频防息屏已释放');
+                // 不清除视频，以便重新播放
+                console.log('视频防息屏已暂停');
             }
         }
 
@@ -1978,6 +2001,9 @@
             phText.style.display = 'none';
             resultImg.style.display = 'none';
             loopBtn.style.display = 'none';
+
+            // 预初始化视频防息屏（在用户交互期间）
+            initNoSleepVideo().catch(() => {});
 
             // 设置请求状态
             requestStartTime = Date.now();
