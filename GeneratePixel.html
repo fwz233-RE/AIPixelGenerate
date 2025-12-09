@@ -1534,15 +1534,15 @@
             const prompt = document.getElementById('prompt').value.trim();
 
             if (!apiKey) return log("请先填写 API Key", 'error');
-            if (!apiKey) return log("请先填写 API Key", 'error');
             if (!prompt) return log("请填写提示词", 'error');
 
-            // --- iOS Audio Fix: Warm up SpeechSynthesis on user gesture ---
+            // --- iOS Audio Fix: Unlock SpeechSynthesis with silent utterance on user interaction ---
             if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-                window.speechSynthesis.speak(new SpeechSynthesisUtterance(" "));
+                const silent = new SpeechSynthesisUtterance("");
+                silent.volume = 0;
+                window.speechSynthesis.speak(silent);
             }
-            // -----------------------------------------------------------
+            // ------------------------------------------------------------------------------------
 
             // UI 状态
             const btn = document.getElementById('generateBtn');
@@ -1672,10 +1672,10 @@
                         // --- 新增：调用播放声音函数 ---
                         playCompletionSound();
 
-                        // --- 完成后隐藏 AOD 按钮和 URL UI ---
+                        // --- 播放音频提醒之后，关闭或者隐藏 aod按钮和 url的ui ---
                         document.getElementById('aodBtn').style.display = 'none';
                         document.getElementById('imageUrlDisplay').style.display = 'none';
-                        // ----------------------------------
+                        // ---------------------------------------------------
                     };
                     resultImg.onerror = () => {
                         log("❌ 图片加载失败", 'error');
