@@ -19,7 +19,7 @@
         html {
             height: 100%;
             /* 支持iOS安全区域 */
-            padding-top: env(safe-area-inset-top, 0px);
+            /* padding-top由body处理 */
             padding-left: env(safe-area-inset-left, 0px);
             padding-right: env(safe-area-inset-right, 0px);
             padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -31,7 +31,7 @@
             background-color: var(--bg-color);
             color: var(--text-color);
             margin: 0;
-            padding: 20px;
+            padding: calc(20px + env(safe-area-inset-top, 0px)) 20px 20px 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -898,7 +898,7 @@
     <link rel="icon" href="icon.PNG" type="image/png">
     <link rel="apple-touch-icon" href="icon.PNG">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#4a90e2">
     <link rel="manifest" href="manifest.json">
 </head>
@@ -1677,6 +1677,7 @@
         let keepAwakeAudioContext = null;
         let videoCheckIntervalId = null;
         let videoAnimationFrameId = null;
+        let noSleepAudioContext = null;
 
         async function initNoSleepVideo() {
             if (noSleepVideoInitialized && noSleepVideo) return;
@@ -1685,8 +1686,10 @@
                 noSleepVideo = document.createElement('video');
                 noSleepVideo.setAttribute('playsinline', '');
                 noSleepVideo.setAttribute('webkit-playsinline', '');
+                noSleepVideo.setAttribute('autoplay', '');
                 noSleepVideo.muted = true;
                 noSleepVideo.loop = true;
+                noSleepVideo.volume = 0.0001; // 极低音量但非零，提高iOS兼容性
 
                 // 设置一个透明的2x2像素视频
                 const canvas = document.createElement('canvas');
@@ -1703,10 +1706,18 @@
                     const canvasStream = canvas.captureStream();
                     if (typeof MediaStream !== 'undefined' && 'getAudioTracks' in canvasStream) {
                         // 如果支持，添加一个静音音频轨道
-                        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                        const oscillator = audioContext.createOscillator();
-                        const destination = audioContext.createMediaStreamDestination();
-                        oscillator.connect(destination);
+                        // 使用独立的音频上下文，避免与keepAwakeAudioContext冲突
+                        noSleepAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        const oscillator = noSleepAudioContext.createOscillator();
+                        const gainNode = noSleepAudioContext.createGain();
+                        const destination = noSleepAudioContext.createMediaStreamDestination();
+
+                        // 设置增益为0（完全静音）
+                        gainNode.gain.value = 0;
+
+                        // 连接：振荡器 -> 增益节点 -> 目的地
+                        oscillator.connect(gainNode);
+                        gainNode.connect(destination);
                         oscillator.start();
 
                         // 合并视频和音频轨道
@@ -1714,13 +1725,13 @@
                         const videoTrack = canvasStream.getVideoTracks()[0];
                         stream = new MediaStream([videoTrack, audioTrack]);
 
-                        // 立即关闭音频上下文以避免占用资源
-                        oscillator.stop();
-                        audioContext.close();
+                        // 不停止振荡器，保持音频轨道活动
+                        console.log('视频音频轨道已创建并保持活动');
                     } else {
                         stream = canvasStream;
                     }
                 } catch (e) {
+                    console.error('创建音频轨道失败:', e);
                     // 回退到原始canvas流
                     stream = canvas.captureStream();
                 }
@@ -2092,6 +2103,16 @@
                 }).catch(e => {
                     console.error('音频上下文关闭失败:', e);
                     keepAwakeAudioContext = null;
+                });
+            }
+            // 关闭视频音频上下文
+            if (noSleepAudioContext) {
+                noSleepAudioContext.close().then(() => {
+                    noSleepAudioContext = null;
+                    console.log('视频音频上下文已释放');
+                }).catch(e => {
+                    console.error('视频音频上下文关闭失败:', e);
+                    noSleepAudioContext = null;
                 });
             }
         }
