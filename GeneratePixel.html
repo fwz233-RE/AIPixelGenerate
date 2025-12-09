@@ -1741,9 +1741,6 @@
             const container = document.getElementById('aodContainer');
             const video = document.getElementById('aodBlackVideo');
 
-            // 显示容器
-            // container.style.display = 'block'; // <--- 不再显示遮罩层
-
             // 播放视频
             try {
                 await video.play();
@@ -1784,9 +1781,6 @@
 
             // 暂停视频
             video.pause();
-
-            // 隐藏容器
-            container.style.display = 'none';
 
             // Release wake lock
             await releaseWakeLock();
