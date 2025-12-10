@@ -1741,8 +1741,12 @@
             const container = document.getElementById('aodContainer');
             const video = document.getElementById('aodBlackVideo');
 
-            // 显示容器
+            // 重置样式（因为exitAODMode会隐藏这些元素）
             container.style.display = 'block';
+            container.style.visibility = 'visible';
+            container.style.opacity = '1';
+            video.style.display = 'block';
+            video.style.visibility = 'visible';
 
             // 播放视频
             try {
@@ -1771,6 +1775,16 @@
             const container = document.getElementById('aodContainer');
             const video = document.getElementById('aodBlackVideo');
 
+            // 先立即隐藏容器和视频（在退出全屏之前），防止iOS上出现黑色残留层
+            container.style.display = 'none';
+            container.style.visibility = 'hidden';
+            container.style.opacity = '0';
+            video.style.display = 'none';
+            video.style.visibility = 'hidden';
+
+            // 暂停视频
+            video.pause();
+
             // 退出全屏
             try {
                 if (document.exitFullscreen) {
@@ -1781,12 +1795,6 @@
                     video.webkitExitFullscreen();
                 }
             } catch (e) { }
-
-            // 暂停视频
-            video.pause();
-
-            // 隐藏容器
-            container.style.display = 'none';
 
             // Release wake lock
             await releaseWakeLock();
