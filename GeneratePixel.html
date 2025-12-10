@@ -1006,9 +1006,9 @@
         </div>
     </div>
 
-    <!-- AOD Mode: Video Fullscreen Only (无容器包裹，避免黑色遮罩残留) -->
-    <video id="aodBlackVideo" playsinline webkit-playsinline muted loop preload="auto" onclick="exitAODMode()"
-        style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#000;cursor:pointer;z-index:9999;">
+    <!-- AOD Mode: Video Fullscreen Only (移除background:#000，这是iOS黑色层的来源) -->
+    <video id="aodBlackVideo" playsinline webkit-playsinline muted loop preload="auto"
+        style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;cursor:pointer;z-index:9999;">
         <source src="黑.mp4" type="video/mp4">
     </video>
 
@@ -1946,26 +1946,28 @@
         async function toggleAODMode() {
             const video = document.getElementById('aodBlackVideo');
 
-            // 显示视频元素并重置所有样式
+            // 显示视频元素并重置所有样式（移除所有隐藏状态）
             video.style.display = 'block';
             video.style.opacity = '1';
             video.style.visibility = 'visible';
             video.style.zIndex = '9999';
+            video.style.pointerEvents = 'auto'; // 恢复指针事件
+            video.style.transform = 'scale(1)'; // 恢复缩放
 
             // 播放视频
             try {
                 await video.play();
             } catch (e) { }
 
-            // 请求视频全屏（这是关键！视频全屏才能隐藏iOS状态栏）
+            // 请求视频全屏（iOS优先使用webkitEnterFullscreen）
             try {
-                if (video.requestFullscreen) {
-                    await video.requestFullscreen();
+                if (video.webkitEnterFullscreen) {
+                    // iOS Safari - 使用原生全屏播放器
+                    video.webkitEnterFullscreen();
                 } else if (video.webkitRequestFullscreen) {
                     await video.webkitRequestFullscreen();
-                } else if (video.webkitEnterFullscreen) {
-                    // iOS Safari
-                    video.webkitEnterFullscreen();
+                } else if (video.requestFullscreen) {
+                    await video.requestFullscreen();
                 }
             } catch (e) { }
 
@@ -1974,37 +1976,48 @@
         }
 
 
-        // Exit AOD Mode - FIXED: Immediately hide video to prevent black overlay
-        function exitAODMode() {
+        // Exit AOD Mode - iOS Deep Fix: 彻底移除黑色覆盖层
+        function exitAODMode(fromEvent = false) {
             const video = document.getElementById('aodBlackVideo');
 
-            // 立即隐藏视频元素和覆盖层，防止黑色层残留
+            // 防止重复调用
+            if (video.style.display === 'none') return;
+
+            // 立即完全隐藏视频元素和所有交互
             video.style.display = 'none';
             video.style.opacity = '0';
             video.style.visibility = 'hidden';
             video.style.zIndex = '-9999';
+            video.style.pointerEvents = 'none'; // 禁用所有指针事件
+            video.style.transform = 'scale(0)'; // 缩放为0
 
             // 暂停视频
             video.pause();
             video.currentTime = 0;
 
-            // 退出全屏 - 同步执行，不等待
+            // 退出全屏 - iOS需要特殊处理
             try {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen().catch(() => { });
+                if (video.webkitExitFullscreen) {
+                    // iOS优先使用这个方法
+                    video.webkitExitFullscreen();
                 } else if (document.webkitExitFullscreen) {
                     document.webkitExitFullscreen();
-                } else if (video.webkitExitFullscreen) {
-                    video.webkitExitFullscreen();
+                } else if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => { });
                 }
             } catch (e) { }
 
             // Release wake lock
             releaseWakeLock();
 
-            // 强制重绘，确保iOS完全移除覆盖层
-            video.offsetHeight;
-            document.body.offsetHeight;
+            // 强制多次重绘，确保iOS完全移除覆盖层
+            requestAnimationFrame(() => {
+                video.offsetHeight;
+                document.body.offsetHeight;
+                requestAnimationFrame(() => {
+                    video.offsetHeight;
+                });
+            });
         }
 
 
@@ -2020,15 +2033,28 @@
         document.addEventListener('fullscreenchange', () => {
             const aodVideo = document.getElementById('aodBlackVideo');
             if (!document.fullscreenElement && aodVideo && aodVideo.style.display !== 'none') {
-                exitAODMode();
+                exitAODMode(true);
             }
         });
 
         document.addEventListener('webkitfullscreenchange', () => {
             const aodVideo = document.getElementById('aodBlackVideo');
             if (!document.webkitFullscreenElement && aodVideo && aodVideo.style.display !== 'none') {
-                exitAODMode();
+                exitAODMode(true);
             }
+        });
+
+        // iOS专用：监听原生视频播放器退出事件（这是核心！）
+        document.getElementById('aodBlackVideo').addEventListener('webkitendfullscreen', () => {
+            // iOS原生播放器完全退出后立即隐藏黑色层
+            exitAODMode(true);
+        });
+
+        // iOS专用：视频点击事件处理
+        document.getElementById('aodBlackVideo').addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            exitAODMode();
         });
 
         // --- Prompt Manager Functions ---
