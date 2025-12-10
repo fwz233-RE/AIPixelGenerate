@@ -759,7 +759,7 @@
 
         <div class="input-group">
             <label>
-                参考图片 (最多6张) - 支持拖拽或Ctrl+V粘贴
+                参考图片 (最多6张) - 支持拖拽
                 <span id="imgCountBadge" class="tag" style="background:#ddd; color:#333;">0 / 6</span>
             </label>
 
@@ -938,22 +938,35 @@
         // --- 1. 持久化存储 ---
         const CONFIG_KEYS = { BASE_URL: 'ai_gen_base_url', API_KEY: 'ai_gen_api_key', MODEL: 'ai_gen_model', PROMPT: 'ai_gen_prompt' };
 
+        // 默认Prompt常量
+        const DEFAULT_PROMPT = '生成真人coser扮演该角色的全身照片。\n\n要求：碎剪层次感刘海，柔软发质，发丝细节，真实发质纹理，发缕分明，动态感发丝，飘逸发型。\n保持原发型、动作、瞳色及表情。\n真实人类，真实物理世界的光照与环境\n忽略所有文字';
+
         window.addEventListener('DOMContentLoaded', () => {
             document.getElementById('baseUrl').value = localStorage.getItem(CONFIG_KEYS.BASE_URL) || 'https://521api.com';
             document.getElementById('apiKey').value = localStorage.getItem(CONFIG_KEYS.API_KEY) || '';
             document.getElementById('modelName').value = localStorage.getItem(CONFIG_KEYS.MODEL) || 'gemini-3-pro-image-preview-4k';
-            document.getElementById('prompt').value = localStorage.getItem(CONFIG_KEYS.PROMPT) || '生成真人coser扮演该角色的全身照片。\n\n要求：碎剪层次感刘海，柔软发质，发丝细节，真实发质纹理，发缕分明，动态感发丝，飘逸发型。\n保持原发型、动作、瞳色及表情。\n真实人类，真实物理世界的光照与环境\n忽略所有文字';
+            document.getElementById('prompt').value = localStorage.getItem(CONFIG_KEYS.PROMPT) || DEFAULT_PROMPT;
             log("系统就绪，配置已加载。");
 
             // 注册全局粘贴事件监听器
             document.addEventListener('paste', handlePaste);
         });
 
+
         function saveConfig() {
             localStorage.setItem(CONFIG_KEYS.BASE_URL, document.getElementById('baseUrl').value);
             localStorage.setItem(CONFIG_KEYS.API_KEY, document.getElementById('apiKey').value);
             localStorage.setItem(CONFIG_KEYS.MODEL, document.getElementById('modelName').value);
-            localStorage.setItem(CONFIG_KEYS.PROMPT, document.getElementById('prompt').value);
+
+            // 检测Prompt是否为空，如果为空则恢复默认值
+            const promptValue = document.getElementById('prompt').value.trim();
+            if (promptValue === '') {
+                document.getElementById('prompt').value = DEFAULT_PROMPT;
+                localStorage.setItem(CONFIG_KEYS.PROMPT, DEFAULT_PROMPT);
+                log('Prompt为空，已恢复默认值', 'warn');
+            } else {
+                localStorage.setItem(CONFIG_KEYS.PROMPT, promptValue);
+            }
         }
 
         // --- 图片URL显示相关 ---
@@ -1741,12 +1754,8 @@
             const container = document.getElementById('aodContainer');
             const video = document.getElementById('aodBlackVideo');
 
-            // 重置样式（因为exitAODMode会隐藏这些元素）
+            // 显示容器
             container.style.display = 'block';
-            container.style.visibility = 'visible';
-            container.style.opacity = '1';
-            video.style.display = 'block';
-            video.style.visibility = 'visible';
 
             // 播放视频
             try {
@@ -1775,12 +1784,8 @@
             const container = document.getElementById('aodContainer');
             const video = document.getElementById('aodBlackVideo');
 
-            // 先立即隐藏容器和视频（在退出全屏之前），防止iOS上出现黑色残留层
+            // 立即隐藏容器（最先执行，避免黑色层残留）
             container.style.display = 'none';
-            container.style.visibility = 'hidden';
-            container.style.opacity = '0';
-            video.style.display = 'none';
-            video.style.visibility = 'hidden';
 
             // 暂停视频
             video.pause();
@@ -1813,6 +1818,8 @@
         document.addEventListener('fullscreenchange', () => {
             const aodContainer = document.getElementById('aodContainer');
             if (!document.fullscreenElement && aodContainer && aodContainer.style.display !== 'none') {
+                // 立即隐藏容器，避免黑色层残留
+                aodContainer.style.display = 'none';
                 exitAODMode();
             }
         });
@@ -1820,6 +1827,8 @@
         document.addEventListener('webkitfullscreenchange', () => {
             const aodContainer = document.getElementById('aodContainer');
             if (!document.webkitFullscreenElement && aodContainer && aodContainer.style.display !== 'none') {
+                // 立即隐藏容器，避免黑色层残留
+                aodContainer.style.display = 'none';
                 exitAODMode();
             }
         });
