@@ -1946,8 +1946,11 @@
         async function toggleAODMode() {
             const video = document.getElementById('aodBlackVideo');
 
-            // 显示视频元素
+            // 显示视频元素并重置所有样式
             video.style.display = 'block';
+            video.style.opacity = '1';
+            video.style.visibility = 'visible';
+            video.style.zIndex = '9999';
 
             // 播放视频
             try {
@@ -1972,29 +1975,36 @@
 
 
         // Exit AOD Mode - FIXED: Immediately hide video to prevent black overlay
-        async function exitAODMode() {
+        function exitAODMode() {
             const video = document.getElementById('aodBlackVideo');
 
-            // 立即隐藏视频元素，防止黑色层残留
+            // 立即隐藏视频元素和覆盖层，防止黑色层残留
             video.style.display = 'none';
+            video.style.opacity = '0';
+            video.style.visibility = 'hidden';
+            video.style.zIndex = '-9999';
 
             // 暂停视频
             video.pause();
             video.currentTime = 0;
 
-            // 退出全屏
+            // 退出全屏 - 同步执行，不等待
             try {
                 if (document.exitFullscreen) {
-                    await document.exitFullscreen();
+                    document.exitFullscreen().catch(() => { });
                 } else if (document.webkitExitFullscreen) {
-                    await document.webkitExitFullscreen();
+                    document.webkitExitFullscreen();
                 } else if (video.webkitExitFullscreen) {
                     video.webkitExitFullscreen();
                 }
             } catch (e) { }
 
             // Release wake lock
-            await releaseWakeLock();
+            releaseWakeLock();
+
+            // 强制重绘，确保iOS完全移除覆盖层
+            video.offsetHeight;
+            document.body.offsetHeight;
         }
 
 
@@ -2006,7 +2016,7 @@
             }
         });
 
-        // Handle fullscreen change - 当全屏退出时自动隐藏黑色层
+        // Handle fullscreen change - 当全屏退出时立即隐藏黑色层
         document.addEventListener('fullscreenchange', () => {
             const aodVideo = document.getElementById('aodBlackVideo');
             if (!document.fullscreenElement && aodVideo && aodVideo.style.display !== 'none') {
@@ -2176,15 +2186,6 @@
         // Load prompt history on page load
         window.addEventListener('DOMContentLoaded', () => {
             loadPromptHistory();
-
-            // Auto-exit AOD mode when video loads successfully (fixes iOS PWA black overlay issue)
-            const aodVideo = document.getElementById('aodBlackVideo');
-            if (aodVideo) {
-                aodVideo.addEventListener('loadeddata', () => {
-                    // Automatically exit AOD mode once video is loaded
-                    exitAODMode();
-                });
-            }
         });
     </script>
 
