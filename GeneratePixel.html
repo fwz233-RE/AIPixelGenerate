@@ -733,6 +733,190 @@
         .aod-btn:hover {
             background: linear-gradient(135deg, #16213e, #0f3460) !important;
         }
+
+        /* Prompt Manager Styles */
+        .prompt-manager-btn {
+            background: linear-gradient(135deg, #667eea, #764ba2) !important;
+            padding: 8px 16px !important;
+            font-size: 14px !important;
+            width: auto !important;
+            margin-top: 8px !important;
+            margin-left: 0 !important;
+        }
+
+        .prompt-manager-btn:hover {
+            background: linear-gradient(135deg, #764ba2, #667eea) !important;
+        }
+
+        .prompt-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            height: 100dvh;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 1001;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        .prompt-modal.active {
+            display: flex;
+        }
+
+        .prompt-dialog {
+            background: var(--panel-bg);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 800px;
+            max-height: min(700px, calc(100vh - 40px));
+            max-height: min(700px, calc(100dvh - 40px));
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .prompt-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .prompt-header h2 {
+            margin: 0;
+            font-size: 1.4em;
+        }
+
+        .prompt-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .prompt-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .prompt-item {
+            background: #f8f9fa;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .prompt-item:hover {
+            border-color: var(--primary-color);
+            background: #fff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .prompt-item.current {
+            border-color: var(--success-color);
+            background: #e8f5e9;
+        }
+
+        .prompt-text {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 8px;
+            line-height: 1.5;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .prompt-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #888;
+        }
+
+        .prompt-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .prompt-action-btn {
+            padding: 4px 12px !important;
+            font-size: 12px !important;
+            width: auto !important;
+            margin: 0 !important;
+            border-radius: 6px !important;
+        }
+
+        .prompt-action-btn.edit {
+            background: #f39c12 !important;
+        }
+
+        .prompt-action-btn.delete {
+            background: #e74c3c !important;
+        }
+
+        .prompt-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+            flex-shrink: 0;
+        }
+
+        .add-prompt-btn {
+            background: var(--success-color) !important;
+            padding: 10px 20px !important;
+            font-size: 14px !important;
+            width: auto !important;
+            margin: 0 !important;
+        }
+
+        .empty-prompt-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+
+        .empty-prompt-state p {
+            font-size: 16px;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 600px) {
+            .prompt-dialog {
+                max-height: calc(100dvh - 20px);
+                border-radius: 12px;
+            }
+
+            .prompt-header h2 {
+                font-size: 1.2em;
+            }
+
+            .prompt-item {
+                padding: 12px;
+            }
+
+            .prompt-actions {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 
@@ -759,7 +943,7 @@
 
         <div class="input-group">
             <label>
-                参考图片 (最多6张) - 支持拖拽
+                参考图片 (最多6张) - 支持拖拽或Ctrl+V粘贴
                 <span id="imgCountBadge" class="tag" style="background:#ddd; color:#333;">0 / 6</span>
             </label>
 
@@ -779,6 +963,7 @@
         <div class="input-group">
             <label for="prompt">提示词 (Prompt)</label>
             <textarea id="prompt" placeholder="描述你想生成的图片内容..." onchange="saveConfig()"></textarea>
+            <button class="prompt-manager-btn" onclick="openPromptManager()">📝 Prompt 管理</button>
         </div>
 
         <button id="generateBtn" onclick="generateImage()">🚀 开始生成图片</button>
@@ -828,6 +1013,28 @@
             style="position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#000;cursor:pointer;">
             <source src="黑.mp4" type="video/mp4">
         </video>
+    </div>
+
+    <!-- Prompt Manager Modal -->
+    <div class="prompt-modal" id="promptModal">
+        <div class="prompt-dialog">
+            <div class="prompt-header">
+                <h2>📝 Prompt 管理器</h2>
+                <button class="close-btn" onclick="closePromptManager()">×</button>
+            </div>
+
+            <div class="prompt-body">
+                <div id="promptList" class="prompt-list">
+                    <!-- Prompt items will be rendered here -->
+                </div>
+            </div>
+
+            <div class="prompt-footer">
+                <button class="add-prompt-btn" onclick="addNewPrompt()">➕ 添加新 Prompt</button>
+                <button class="close-btn" onclick="closePromptManager()"
+                    style="background: #6c757d; width: auto; padding: 10px 20px; font-size: 14px; border-radius: 6px;">关闭</button>
+            </div>
+        </div>
     </div>
 
     <!-- 压缩对话框 -->
@@ -936,37 +1143,24 @@
 
     <script>
         // --- 1. 持久化存储 ---
-        const CONFIG_KEYS = { BASE_URL: 'ai_gen_base_url', API_KEY: 'ai_gen_api_key', MODEL: 'ai_gen_model', PROMPT: 'ai_gen_prompt' };
-
-        // 默认Prompt常量
-        const DEFAULT_PROMPT = '生成真人coser扮演该角色的全身照片。\n\n要求：碎剪层次感刘海，柔软发质，发丝细节，真实发质纹理，发缕分明，动态感发丝，飘逸发型。\n保持原发型、动作、瞳色及表情。\n真实人类，真实物理世界的光照与环境\n忽略所有文字';
+        const CONFIG_KEYS = { BASE_URL: 'ai_gen_base_url', API_KEY: 'ai_gen_api_key', MODEL: 'ai_gen_model', PROMPT: 'ai_gen_prompt', PROMPT_HISTORY: 'ai_gen_prompt_history' };
 
         window.addEventListener('DOMContentLoaded', () => {
             document.getElementById('baseUrl').value = localStorage.getItem(CONFIG_KEYS.BASE_URL) || 'https://521api.com';
             document.getElementById('apiKey').value = localStorage.getItem(CONFIG_KEYS.API_KEY) || '';
             document.getElementById('modelName').value = localStorage.getItem(CONFIG_KEYS.MODEL) || 'gemini-3-pro-image-preview-4k';
-            document.getElementById('prompt').value = localStorage.getItem(CONFIG_KEYS.PROMPT) || DEFAULT_PROMPT;
+            document.getElementById('prompt').value = localStorage.getItem(CONFIG_KEYS.PROMPT) || '生成真人coser扮演该角色的全身照片。\n\n要求：碎剪层次感刘海，柔软发质，发丝细节，真实发质纹理，发缕分明，动态感发丝，飘逸发型。\n保持原发型、动作、瞳色及表情。\n真实人类，真实物理世界的光照与环境\n忽略所有文字';
             log("系统就绪，配置已加载。");
 
             // 注册全局粘贴事件监听器
             document.addEventListener('paste', handlePaste);
         });
 
-
         function saveConfig() {
             localStorage.setItem(CONFIG_KEYS.BASE_URL, document.getElementById('baseUrl').value);
             localStorage.setItem(CONFIG_KEYS.API_KEY, document.getElementById('apiKey').value);
             localStorage.setItem(CONFIG_KEYS.MODEL, document.getElementById('modelName').value);
-
-            // 检测Prompt是否为空，如果为空则恢复默认值
-            const promptValue = document.getElementById('prompt').value.trim();
-            if (promptValue === '') {
-                document.getElementById('prompt').value = DEFAULT_PROMPT;
-                localStorage.setItem(CONFIG_KEYS.PROMPT, DEFAULT_PROMPT);
-                log('Prompt为空，已恢复默认值', 'warn');
-            } else {
-                localStorage.setItem(CONFIG_KEYS.PROMPT, promptValue);
-            }
+            localStorage.setItem(CONFIG_KEYS.PROMPT, document.getElementById('prompt').value);
         }
 
         // --- 图片URL显示相关 ---
@@ -1672,6 +1866,9 @@
                     }
                     // -----------------------
 
+                    // --- 添加 Prompt 到历史记录 ---
+                    addPromptToHistory(prompt);
+
                     // 显示图片URL
                     displayImageUrl(finalImageUrl);
                     resultImg.src = finalImageUrl;
@@ -1779,16 +1976,17 @@
         }
 
 
-        // Exit AOD Mode
+        // Exit AOD Mode - FIXED: Immediately hide container to prevent black overlay
         async function exitAODMode() {
             const container = document.getElementById('aodContainer');
             const video = document.getElementById('aodBlackVideo');
 
-            // 立即隐藏容器（最先执行，避免黑色层残留）
+            // 立即隐藏容器，防止黑色层残留
             container.style.display = 'none';
 
             // 暂停视频
             video.pause();
+            video.currentTime = 0;
 
             // 退出全屏
             try {
@@ -1818,8 +2016,6 @@
         document.addEventListener('fullscreenchange', () => {
             const aodContainer = document.getElementById('aodContainer');
             if (!document.fullscreenElement && aodContainer && aodContainer.style.display !== 'none') {
-                // 立即隐藏容器，避免黑色层残留
-                aodContainer.style.display = 'none';
                 exitAODMode();
             }
         });
@@ -1827,10 +2023,183 @@
         document.addEventListener('webkitfullscreenchange', () => {
             const aodContainer = document.getElementById('aodContainer');
             if (!document.webkitFullscreenElement && aodContainer && aodContainer.style.display !== 'none') {
-                // 立即隐藏容器，避免黑色层残留
-                aodContainer.style.display = 'none';
                 exitAODMode();
             }
+        });
+
+        // --- Prompt Manager Functions ---
+        let promptHistory = [];
+
+        // Load prompt history from localStorage
+        function loadPromptHistory() {
+            const saved = localStorage.getItem(CONFIG_KEYS.PROMPT_HISTORY);
+            if (saved) {
+                try {
+                    promptHistory = JSON.parse(saved);
+                } catch (e) {
+                    promptHistory = [];
+                }
+            }
+        }
+
+        // Save prompt history to localStorage
+        function savePromptHistory() {
+            localStorage.setItem(CONFIG_KEYS.PROMPT_HISTORY, JSON.stringify(promptHistory));
+        }
+
+        // Add prompt to history (called after successful generation)
+        function addPromptToHistory(text) {
+            if (!text || text.trim() === '') return;
+
+            // Check if prompt already exists
+            const existingIndex = promptHistory.findIndex(p => p.text === text);
+            if (existingIndex !== -1) {
+                // Update timestamp and move to top
+                const existing = promptHistory.splice(existingIndex, 1)[0];
+                existing.timestamp = Date.now();
+                existing.usedCount++;
+                promptHistory.unshift(existing);
+            } else {
+                // Add new prompt
+                promptHistory.unshift({
+                    id: Date.now(),
+                    text: text,
+                    timestamp: Date.now(),
+                    usedCount: 1
+                });
+            }
+
+            // Keep only last 10
+            if (promptHistory.length > 10) {
+                promptHistory = promptHistory.slice(0, 10);
+            }
+
+            savePromptHistory();
+        }
+
+        // Open prompt manager modal
+        function openPromptManager() {
+            loadPromptHistory();
+            renderPromptList();
+            document.getElementById('promptModal').classList.add('active');
+        }
+
+        // Close prompt manager modal
+        function closePromptManager() {
+            document.getElementById('promptModal').classList.remove('active');
+        }
+
+        // Render prompt list
+        function renderPromptList() {
+            const listContainer = document.getElementById('promptList');
+            const currentPrompt = document.getElementById('prompt').value;
+
+            if (promptHistory.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="empty-prompt-state">
+                        <p>📝 暂无 Prompt 历史记录</p>
+                        <p style="font-size: 14px; color: #aaa;">生成图片后会自动记录最近 10 次使用的 Prompt</p>
+                    </div>
+                `;
+                return;
+            }
+
+            listContainer.innerHTML = promptHistory.map((item, index) => {
+                const isCurrent = item.text === currentPrompt;
+                const date = new Date(item.timestamp);
+                const timeStr = date.toLocaleString('zh-CN', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                return `
+                    <div class="prompt-item ${isCurrent ? 'current' : ''}" onclick="selectPrompt(${item.id})">
+                        <div class="prompt-text">${escapeHtml(item.text)}</div>
+                        <div class="prompt-meta">
+                            <span>🕒 ${timeStr} | 使用 ${item.usedCount} 次</span>
+                            <div class="prompt-actions" onclick="event.stopPropagation();">
+                                <button class="prompt-action-btn edit" onclick="editPrompt(${item.id})">✏️ 编辑</button>
+                                <button class="prompt-action-btn delete" onclick="deletePrompt(${item.id})">🗑️ 删除</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Select and apply prompt
+        function selectPrompt(id) {
+            const prompt = promptHistory.find(p => p.id === id);
+            if (prompt) {
+                document.getElementById('prompt').value = prompt.text;
+                saveConfig();
+                log(`已应用 Prompt: ${prompt.text.substring(0, 50)}...`, 'success');
+                closePromptManager();
+            }
+        }
+
+        // Edit prompt
+        function editPrompt(id) {
+            const prompt = promptHistory.find(p => p.id === id);
+            if (!prompt) return;
+
+            const newText = window.prompt('编辑 Prompt:', prompt.text);
+            if (newText !== null && newText.trim() !== '') {
+                prompt.text = newText.trim();
+                prompt.timestamp = Date.now();
+                savePromptHistory();
+                renderPromptList();
+                log('Prompt 已更新', 'success');
+            }
+        }
+
+        // Delete prompt
+        function deletePrompt(id) {
+            if (!confirm('确定要删除这个 Prompt 吗?')) return;
+
+            const index = promptHistory.findIndex(p => p.id === id);
+            if (index !== -1) {
+                promptHistory.splice(index, 1);
+                savePromptHistory();
+                renderPromptList();
+                log('Prompt 已删除', 'warn');
+            }
+        }
+
+        // Add new prompt manually
+        function addNewPrompt() {
+            const text = window.prompt('输入新的 Prompt:');
+            if (text && text.trim() !== '') {
+                promptHistory.unshift({
+                    id: Date.now(),
+                    text: text.trim(),
+                    timestamp: Date.now(),
+                    usedCount: 0
+                });
+
+                // Keep only last 10
+                if (promptHistory.length > 10) {
+                    promptHistory = promptHistory.slice(0, 10);
+                }
+
+                savePromptHistory();
+                renderPromptList();
+                log('新 Prompt 已添加', 'success');
+            }
+        }
+
+        // Load prompt history on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadPromptHistory();
         });
     </script>
 
