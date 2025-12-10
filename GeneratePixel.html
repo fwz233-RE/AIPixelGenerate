@@ -1006,14 +1006,11 @@
         </div>
     </div>
 
-    <!-- AOD Mode: Video Fullscreen Only -->
-    <div class="aod-container" id="aodContainer" style="display:none;">
-        <!-- 黑色视频 - 使用原生全屏以隐藏iOS状态栏 -->
-        <video id="aodBlackVideo" playsinline webkit-playsinline muted loop preload="auto" onclick="exitAODMode()"
-            style="position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#000;cursor:pointer;">
-            <source src="黑.mp4" type="video/mp4">
-        </video>
-    </div>
+    <!-- AOD Mode: Video Fullscreen Only (无容器包裹，避免黑色遮罩残留) -->
+    <video id="aodBlackVideo" playsinline webkit-playsinline muted loop preload="auto" onclick="exitAODMode()"
+        style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;background:#000;cursor:pointer;z-index:9999;">
+        <source src="黑.mp4" type="video/mp4">
+    </video>
 
     <!-- Prompt Manager Modal -->
     <div class="prompt-modal" id="promptModal">
@@ -1860,8 +1857,8 @@
                     log("获取图片 URL，渲染中...");
 
                     // --- 强制关闭循环视频 ---
-                    const aodContainer = document.getElementById('aodContainer');
-                    if (aodContainer && aodContainer.style.display !== 'none') {
+                    const aodVideo = document.getElementById('aodBlackVideo');
+                    if (aodVideo && aodVideo.style.display !== 'none') {
                         exitAODMode();
                     }
                     // -----------------------
@@ -1948,11 +1945,10 @@
 
         // Toggle AOD Mode with Video Fullscreen
         async function toggleAODMode() {
-            const container = document.getElementById('aodContainer');
             const video = document.getElementById('aodBlackVideo');
 
-            // 显示容器
-            container.style.display = 'block';
+            // 显示视频元素
+            video.style.display = 'block';
 
             // 播放视频
             try {
@@ -1976,13 +1972,12 @@
         }
 
 
-        // Exit AOD Mode - FIXED: Immediately hide container to prevent black overlay
+        // Exit AOD Mode - FIXED: Immediately hide video to prevent black overlay
         async function exitAODMode() {
-            const container = document.getElementById('aodContainer');
             const video = document.getElementById('aodBlackVideo');
 
-            // 立即隐藏容器，防止黑色层残留
-            container.style.display = 'none';
+            // 立即隐藏视频元素，防止黑色层残留
+            video.style.display = 'none';
 
             // 暂停视频
             video.pause();
@@ -2006,23 +2001,23 @@
 
         // Handle visibility change to reacquire wake lock
         document.addEventListener('visibilitychange', async () => {
-            const aodContainer = document.getElementById('aodContainer');
-            if (document.visibilityState === 'visible' && aodContainer && aodContainer.style.display !== 'none') {
+            const aodVideo = document.getElementById('aodBlackVideo');
+            if (document.visibilityState === 'visible' && aodVideo && aodVideo.style.display !== 'none') {
                 await requestWakeLock();
             }
         });
 
         // Handle fullscreen change - 当全屏退出时自动隐藏黑色层
         document.addEventListener('fullscreenchange', () => {
-            const aodContainer = document.getElementById('aodContainer');
-            if (!document.fullscreenElement && aodContainer && aodContainer.style.display !== 'none') {
+            const aodVideo = document.getElementById('aodBlackVideo');
+            if (!document.fullscreenElement && aodVideo && aodVideo.style.display !== 'none') {
                 exitAODMode();
             }
         });
 
         document.addEventListener('webkitfullscreenchange', () => {
-            const aodContainer = document.getElementById('aodContainer');
-            if (!document.webkitFullscreenElement && aodContainer && aodContainer.style.display !== 'none') {
+            const aodVideo = document.getElementById('aodBlackVideo');
+            if (!document.webkitFullscreenElement && aodVideo && aodVideo.style.display !== 'none') {
                 exitAODMode();
             }
         });
