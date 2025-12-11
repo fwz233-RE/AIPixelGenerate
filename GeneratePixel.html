@@ -1850,11 +1850,19 @@
                         log(content, 'warn');
                         phText.innerText = "模型未返回图片链接";
                         phText.style.display = 'block';
+
+                        // --- 关闭 AOD 视频 ---
+                        const aodVideo = document.getElementById('aodBlackVideo');
+                        if (aodVideo && aodVideo.style.display !== 'none') {
+                            exitAODMode();
+                        }
+                        // ---------------------
                     }
                 }
 
                 if (finalImageUrl) {
                     log("获取图片 URL，渲染中...");
+                    log(`🔗 URL: ${finalImageUrl}`, 'info'); // 在日志中显示URL内容
 
                     // --- 强制关闭循环视频 ---
                     const aodVideo = document.getElementById('aodBlackVideo');
@@ -2118,7 +2126,7 @@
 
                 return `
                     <div class="prompt-item ${isCurrent ? 'current' : ''}" onclick="selectPrompt(${item.id})">
-                        <div class="prompt-text">${escapeHtml(item.text)}</div>
+                        <div class="prompt-text" style="white-space: pre-wrap;">${escapeHtml(item.text)}</div>
                         <div class="prompt-meta">
                             <span>🕒 ${timeStr}</span>
                             <div class="prompt-actions" onclick="event.stopPropagation();">
