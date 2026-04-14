@@ -2094,6 +2094,100 @@
             });
         }
 
+        function loadImageFromUrl(url) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error('图片加载失败'));
+                img.src = url;
+            });
+        }
+
+        async function normalizeVideoImage(file) {
+            const sourceUrl = await fileToDataUrl(file);
+            const img = await loadImageFromUrl(sourceUrl);
+
+            const MIN_SIDE = 300;
+            const MAX_SIDE = 2048;
+            const MIN_RATIO = 0.4;
+            const MAX_RATIO = 2.5;
+
+            let drawWidth = img.width;
+            let drawHeight = img.height;
+            const minSide = Math.min(drawWidth, drawHeight);
+            const maxSide = Math.max(drawWidth, drawHeight);
+
+            if (minSide < MIN_SIDE) {
+                const scale = MIN_SIDE / minSide;
+                drawWidth = Math.round(drawWidth * scale);
+                drawHeight = Math.round(drawHeight * scale);
+            }
+
+            if (Math.max(drawWidth, drawHeight) > MAX_SIDE) {
+                const scale = MAX_SIDE / Math.max(drawWidth, drawHeight);
+                drawWidth = Math.round(drawWidth * scale);
+                drawHeight = Math.round(drawHeight * scale);
+            }
+
+            let canvasWidth = drawWidth;
+            let canvasHeight = drawHeight;
+            const ratio = drawWidth / drawHeight;
+
+            if (ratio < MIN_RATIO) {
+                canvasWidth = Math.round(drawHeight * MIN_RATIO);
+            } else if (ratio > MAX_RATIO) {
+                canvasHeight = Math.round(drawWidth / MAX_RATIO);
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
+            const offsetX = Math.round((canvasWidth - drawWidth) / 2);
+            const offsetY = Math.round((canvasHeight - drawHeight) / 2);
+            ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+
+            return canvas.toDataURL('image/jpeg', 0.92);
+        }
+
+        function modelSupportsReferenceImages(model) {
+            const value = (model || '').toLowerCase();
+            return value.includes('seedance-2-0') || value.includes('seedance-1-0-lite-i2v');
+        }
+
+        function modelIsSeedance2(model) {
+            return (model || '').toLowerCase().includes('seedance-2-0');
+        }
+
+        function validateVideoRequest(model, mode, resolution) {
+            const value = (model || '').toLowerCase();
+
+            if (mode === 'reference_images' && !modelSupportsReferenceImages(value)) {
+                throw new Error('参考图生视频仅支持 seedance 2.0 / 2.0 fast 或 seedance 1.0 lite i2v 模型');
+            }
+
+            if (modelIsSeedance2(value) && resolution === '1080p') {
+                throw new Error('seedance 2.0 / 2.0 fast 不支持 1080p，请切换到 480p 或 720p');
+            }
+
+            if ((mode === 'first_frame' || mode === 'first_last_frame' || mode === 'reference_images') && modelIsSeedance2(value)) {
+                logVideo('当前模型属于 seedance 2.0 系列；若参考图含真人人脸，平台可能直接拦截。必要时改用 1.5 pro 或更换素材。', 'warn');
+            }
+        }
+
+        function getVideoCreateErrorMessage(error) {
+            const message = error?.message || String(error || '');
+            if (message.toLowerCase().includes('input image may violate platform rules')) {
+                return '接口拦截了参考图。已自动做尺寸和格式规范化；如果仍失败，优先检查 3 点：1）seedance 2.0 系列不支持直接上传含真人人脸的参考图；2）尝试改用 1.5 pro；3）更换非真人或更干净的素材。';
+            }
+            return message;
+        }
+
         async function processVideoFiles(files) {
             const limit = getVideoImageLimit();
             if (limit === 0) {
@@ -2119,10 +2213,10 @@
 
             const accepted = candidates.slice(0, remaining);
             try {
-                const results = await Promise.all(accepted.map(fileToDataUrl));
+                const results = await Promise.all(accepted.map(normalizeVideoImage));
                 videoReferenceImages.push(...results);
                 renderVideoPreviews();
-                logVideo(`已添加 ${results.length} 张参考图片`, 'success');
+                logVideo(`已添加 ${results.length} 张参考图片，并已自动规范为 JPEG`, 'success');
             } catch (error) {
                 logVideo(error.message, 'error');
             }
@@ -2324,6 +2418,8 @@
         async function generateVideo() {
             const apiKey = document.getElementById('videoApiKey').value.trim();
             const model = document.getElementById('videoModel').value.trim();
+            const mode = document.getElementById('videoMode').value;
+            const resolution = document.getElementById('videoResolution').value;
             const button = document.getElementById('generateVideoBtn');
 
             if (!apiKey) return logVideo('请先填写 ARK API Key', 'error');
@@ -2331,6 +2427,7 @@
 
             let content;
             try {
+                validateVideoRequest(model, mode, resolution);
                 content = buildVideoContent();
             } catch (error) {
                 logVideo(error.message, 'error');
@@ -2379,8 +2476,9 @@
                 scheduleVideoPolling(data.id, 2000);
             } catch (error) {
                 setVideoLoading(false, '生成视频后会显示在这里');
-                updateVideoTaskPanel({ status: 'failed', error: { message: error.message } });
-                logVideo(`创建任务失败: ${error.message}`, 'error');
+                const friendlyMessage = getVideoCreateErrorMessage(error);
+                updateVideoTaskPanel({ status: 'failed', error: { message: friendlyMessage } });
+                logVideo(`创建任务失败: ${friendlyMessage}`, 'error');
             } finally {
                 button.disabled = false;
                 button.innerText = '开始生成视频';
