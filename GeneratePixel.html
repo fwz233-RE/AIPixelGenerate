@@ -1142,14 +1142,52 @@
 
     <script>
         // --- 1. 持久化存储 ---
-        const CONFIG_KEYS = { BASE_URL: 'ai_gen_base_url', API_KEY: 'ai_gen_api_key', MODEL: 'ai_gen_model', PROMPT: 'ai_gen_prompt', PROMPT_HISTORY: 'ai_gen_prompt_history' };
+        const CONFIG_KEYS = {
+            BASE_URL: 'ai_gen_base_url',
+            API_KEY: 'ai_gen_api_key',
+            MODEL: 'ai_gen_model',
+            PROMPT: 'ai_gen_prompt',
+            PROMPT_HISTORY: 'ai_gen_prompt_history',
+            ACTIVE_TAB: 'ai_active_tab',
+            VIDEO_API_KEY: 'ai_video_api_key',
+            VIDEO_MODEL: 'ai_video_model',
+            VIDEO_PROMPT: 'ai_video_prompt',
+            VIDEO_MODE: 'ai_video_mode',
+            VIDEO_RESOLUTION: 'ai_video_resolution',
+            VIDEO_RATIO: 'ai_video_ratio',
+            VIDEO_DURATION: 'ai_video_duration',
+            VIDEO_SEED: 'ai_video_seed',
+            VIDEO_GENERATE_AUDIO: 'ai_video_generate_audio',
+            VIDEO_RETURN_LAST_FRAME: 'ai_video_return_last_frame',
+            VIDEO_WATERMARK: 'ai_video_watermark',
+            VIDEO_TASK_ID: 'ai_video_task_id'
+        };
+
+        let activeTab = 'image';
 
         window.addEventListener('DOMContentLoaded', () => {
+            setupTabsAndVideoUI();
             document.getElementById('baseUrl').value = localStorage.getItem(CONFIG_KEYS.BASE_URL) || 'https://521api.com';
             document.getElementById('apiKey').value = localStorage.getItem(CONFIG_KEYS.API_KEY) || '';
             document.getElementById('modelName').value = localStorage.getItem(CONFIG_KEYS.MODEL) || 'gemini-3-pro-image-preview-4k';
-            document.getElementById('prompt').value = localStorage.getItem(CONFIG_KEYS.PROMPT) || '生成真人coser扮演该角色的全身照片。\n\n要求：碎剪层次感刘海，柔软发质，发丝细节，真实发质纹理，发缕分明，动态感发丝，飘逸发型。\n保持原发型、动作、瞳色及表情。\n真实人类，真实物理世界的光照与环境\n忽略所有文字';
+            document.getElementById('prompt').value = localStorage.getItem(CONFIG_KEYS.PROMPT) || '';
+            document.getElementById('videoApiKey').value = localStorage.getItem(CONFIG_KEYS.VIDEO_API_KEY) || localStorage.getItem(CONFIG_KEYS.API_KEY) || '';
+            document.getElementById('videoModel').value = localStorage.getItem(CONFIG_KEYS.VIDEO_MODEL) || 'doubao-seedance-1-5-pro-251215';
+            document.getElementById('videoPrompt').value = localStorage.getItem(CONFIG_KEYS.VIDEO_PROMPT) || '';
+            document.getElementById('videoMode').value = localStorage.getItem(CONFIG_KEYS.VIDEO_MODE) || 'text_only';
+            document.getElementById('videoResolution').value = localStorage.getItem(CONFIG_KEYS.VIDEO_RESOLUTION) || '720p';
+            document.getElementById('videoRatio').value = localStorage.getItem(CONFIG_KEYS.VIDEO_RATIO) || 'adaptive';
+            document.getElementById('videoDuration').value = localStorage.getItem(CONFIG_KEYS.VIDEO_DURATION) || '5';
+            document.getElementById('videoSeed').value = localStorage.getItem(CONFIG_KEYS.VIDEO_SEED) || '-1';
+            document.getElementById('videoGenerateAudio').checked = localStorage.getItem(CONFIG_KEYS.VIDEO_GENERATE_AUDIO) !== 'false';
+            document.getElementById('videoReturnLastFrame').checked = localStorage.getItem(CONFIG_KEYS.VIDEO_RETURN_LAST_FRAME) === 'true';
+            document.getElementById('videoWatermark').checked = localStorage.getItem(CONFIG_KEYS.VIDEO_WATERMARK) === 'true';
+            document.getElementById('videoTaskId').value = localStorage.getItem(CONFIG_KEYS.VIDEO_TASK_ID) || '';
+            attachVideoDropZone();
+            updateVideoModeUI();
+            setActiveTab(localStorage.getItem(CONFIG_KEYS.ACTIVE_TAB) || 'image');
             log("系统就绪，配置已加载。");
+            logVideo("视频页已就绪。");
 
             // 注册全局粘贴事件监听器
             document.addEventListener('paste', handlePaste);
@@ -1160,6 +1198,222 @@
             localStorage.setItem(CONFIG_KEYS.API_KEY, document.getElementById('apiKey').value);
             localStorage.setItem(CONFIG_KEYS.MODEL, document.getElementById('modelName').value);
             localStorage.setItem(CONFIG_KEYS.PROMPT, document.getElementById('prompt').value);
+        }
+
+        function saveVideoConfig() {
+            localStorage.setItem(CONFIG_KEYS.VIDEO_API_KEY, document.getElementById('videoApiKey').value);
+            localStorage.setItem(CONFIG_KEYS.VIDEO_MODEL, document.getElementById('videoModel').value);
+            localStorage.setItem(CONFIG_KEYS.VIDEO_PROMPT, document.getElementById('videoPrompt').value);
+            localStorage.setItem(CONFIG_KEYS.VIDEO_MODE, document.getElementById('videoMode').value);
+            localStorage.setItem(CONFIG_KEYS.VIDEO_RESOLUTION, document.getElementById('videoResolution').value);
+            localStorage.setItem(CONFIG_KEYS.VIDEO_RATIO, document.getElementById('videoRatio').value);
+            localStorage.setItem(CONFIG_KEYS.VIDEO_DURATION, document.getElementById('videoDuration').value);
+            localStorage.setItem(CONFIG_KEYS.VIDEO_SEED, document.getElementById('videoSeed').value);
+            localStorage.setItem(CONFIG_KEYS.VIDEO_GENERATE_AUDIO, document.getElementById('videoGenerateAudio').checked);
+            localStorage.setItem(CONFIG_KEYS.VIDEO_RETURN_LAST_FRAME, document.getElementById('videoReturnLastFrame').checked);
+            localStorage.setItem(CONFIG_KEYS.VIDEO_WATERMARK, document.getElementById('videoWatermark').checked);
+            localStorage.setItem(CONFIG_KEYS.VIDEO_TASK_ID, document.getElementById('videoTaskId').value.trim());
+        }
+
+        function setActiveTab(tabName) {
+            activeTab = tabName;
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tabName);
+            });
+            document.querySelectorAll('.tab-panel').forEach(panel => {
+                panel.classList.toggle('active', panel.id === `${tabName}Tab`);
+            });
+            localStorage.setItem(CONFIG_KEYS.ACTIVE_TAB, tabName);
+        }
+
+        function setupTabsAndVideoUI() {
+            if (document.getElementById('videoTab')) return;
+
+            const styleId = 'video-tab-enhancement-style';
+            if (!document.getElementById(styleId)) {
+                const style = document.createElement('style');
+                style.id = styleId;
+                style.textContent = `
+                    .tab-nav { display:flex; gap:10px; margin:20px 0 24px; flex-wrap:wrap; }
+                    .tab-btn { width:auto; margin:0; padding:10px 18px; background:#e9ecef; color:#495057; font-size:14px; }
+                    .tab-btn.active { background:var(--primary-color); color:#fff; }
+                    .tab-panel { display:none; }
+                    .tab-panel.active { display:block; }
+                    #videoTab input[type="number"], #videoTab select { padding:12px; border:1px solid var(--border-color); border-radius:6px; font-size:14px; background:#fff; }
+                    .section-hint { margin:-8px 0 18px; color:#6c757d; font-size:13px; line-height:1.5; }
+                    .inline-actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+                    .inline-actions button { width:auto; margin:0; padding:10px 14px; font-size:14px; }
+                    .inline-actions input { flex:1; min-width:280px; }
+                    .option-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:15px; }
+                    .checkbox-row { display:flex; gap:16px; flex-wrap:wrap; align-items:center; min-height:46px; padding:10px 12px; border:1px solid var(--border-color); border-radius:6px; background:#fff; }
+                    .checkbox-row label { margin:0; font-weight:500; gap:8px; justify-content:flex-start; }
+                    .checkbox-row input[type="checkbox"] { accent-color: var(--primary-color); }
+                    .thumb-role { position:absolute; left:6px; bottom:6px; padding:2px 6px; border-radius:4px; background:rgba(0,0,0,.68); color:#fff; font-size:11px; z-index:2; }
+                    .status-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+                    .status-card { border:1px solid var(--border-color); border-radius:8px; padding:12px; background:#fafafa; }
+                    .status-card strong { display:block; font-size:12px; color:#6c757d; margin-bottom:6px; }
+                    .status-card span, .status-card a { font-size:14px; color:#333; word-break:break-all; }
+                    .status-badge { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; background:#e9ecef; color:#495057; }
+                    .status-badge.success { background:#d4edda; color:#155724; }
+                    .status-badge.error { background:#f8d7da; color:#721c24; }
+                    .status-badge.running { background:#fff3cd; color:#856404; }
+                    .video-preview-box { border:2px solid var(--border-color); border-radius:8px; min-height:320px; display:flex; align-items:center; justify-content:center; background:#fafafa; overflow:hidden; position:relative; flex-direction:column; padding:20px; gap:12px; }
+                    .video-preview-box video, .video-preview-box img { max-width:100%; max-height:420px; border-radius:8px; background:#000; }
+                    .subtle-note { font-size:12px; color:#6c757d; line-height:1.5; }
+                    @media (max-width: 600px) {
+                        .tab-btn { width:calc(50% - 5px); }
+                        .option-grid, .status-grid { grid-template-columns:1fr; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            const container = document.querySelector('.container');
+            const title = container.querySelector('h1');
+            title.innerHTML = 'AI 图像/视频生成工具 <span class="tag">Single HTML</span>';
+
+            const imageNodes = Array.from(container.children).filter(node => node !== title);
+            const tabNav = document.createElement('div');
+            tabNav.className = 'tab-nav';
+            tabNav.innerHTML = `
+                <button class="tab-btn active" data-tab="image" onclick="setActiveTab('image')">图片生成</button>
+                <button class="tab-btn" data-tab="video" onclick="setActiveTab('video')">视频生成</button>
+            `;
+
+            const imageTab = document.createElement('div');
+            imageTab.id = 'imageTab';
+            imageTab.className = 'tab-panel active';
+            imageNodes.forEach(node => imageTab.appendChild(node));
+
+            const videoTab = document.createElement('div');
+            videoTab.id = 'videoTab';
+            videoTab.className = 'tab-panel';
+            videoTab.innerHTML = `
+                <p class="section-hint">调用火山方舟异步视频任务接口。当前页面支持文生视频、图生视频首帧、首尾帧和参考图模式，暂未接入参考视频和参考音频上传。</p>
+                <div class="config-section">
+                    <div class="input-group">
+                        <label for="videoEndpoint">视频 API Endpoint</label>
+                        <input type="text" id="videoEndpoint" value="https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks" readonly>
+                    </div>
+                    <div class="input-group">
+                        <label for="videoApiKey">ARK API Key</label>
+                        <input type="password" id="videoApiKey" placeholder="输入火山方舟 API Key" onchange="saveVideoConfig()">
+                    </div>
+                    <div class="input-group full-width">
+                        <label for="videoModel">视频模型 ID</label>
+                        <input type="text" id="videoModel" placeholder="例如: doubao-seedance-1-5-pro-251215" onchange="saveVideoConfig()">
+                    </div>
+                </div>
+                <div class="option-grid">
+                    <div class="input-group">
+                        <label for="videoMode">生成模式</label>
+                        <select id="videoMode" onchange="updateVideoModeUI(); saveVideoConfig();">
+                            <option value="text_only">文生视频</option>
+                            <option value="first_frame">图生视频 - 首帧</option>
+                            <option value="first_last_frame">图生视频 - 首尾帧</option>
+                            <option value="reference_images">参考图生视频</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="videoDuration">视频时长（秒）</label>
+                        <input type="number" id="videoDuration" min="2" max="15" step="1" value="5" onchange="saveVideoConfig()">
+                    </div>
+                    <div class="input-group">
+                        <label for="videoResolution">分辨率</label>
+                        <select id="videoResolution" onchange="saveVideoConfig()">
+                            <option value="480p">480p</option>
+                            <option value="720p">720p</option>
+                            <option value="1080p">1080p</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="videoRatio">宽高比</label>
+                        <select id="videoRatio" onchange="saveVideoConfig()">
+                            <option value="adaptive">adaptive</option>
+                            <option value="16:9">16:9</option>
+                            <option value="4:3">4:3</option>
+                            <option value="1:1">1:1</option>
+                            <option value="3:4">3:4</option>
+                            <option value="9:16">9:16</option>
+                            <option value="21:9">21:9</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="videoSeed">Seed（-1 为随机）</label>
+                        <input type="number" id="videoSeed" value="-1" step="1" onchange="saveVideoConfig()">
+                    </div>
+                    <div class="input-group">
+                        <label>输出选项</label>
+                        <div class="checkbox-row">
+                            <label><input type="checkbox" id="videoGenerateAudio" checked onchange="saveVideoConfig()">生成音频</label>
+                            <label><input type="checkbox" id="videoReturnLastFrame" onchange="saveVideoConfig()">返回尾帧</label>
+                            <label><input type="checkbox" id="videoWatermark" onchange="saveVideoConfig()">添加水印</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="videoPrompt">视频提示词</label>
+                    <textarea id="videoPrompt" placeholder="描述你想生成的视频内容..." onchange="saveVideoConfig()"></textarea>
+                    <div class="subtle-note">文生视频必须填写提示词。图生视频时提示词可选，但通常建议一起提供。</div>
+                </div>
+                <div class="input-group">
+                    <label>参考图片 <span id="videoImgCountBadge" class="tag" style="background:#ddd; color:#333;">0 / 0</span></label>
+                    <div class="upload-area" id="videoDropZone" onclick="triggerVideoFileInput()" tabindex="0">
+                        <input type="file" id="videoFileInput" accept="image/*" multiple style="display:none;" onchange="handleVideoFileSelect(event)">
+                        <div id="videoUploadPlaceholder">
+                            <p id="videoUploadTitle" style="margin:0; color:#888; font-size:1.1em;">当前模式无需上传图片</p>
+                            <p id="videoUploadDesc" style="margin:5px 0 0 0; color:#aaa; font-size:0.8em;">切换到图生视频模式后可上传</p>
+                        </div>
+                        <div class="preview-grid" id="videoPreviewGrid"></div>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="videoTaskId">任务 ID</label>
+                    <div class="inline-actions">
+                        <input type="text" id="videoTaskId" placeholder="创建成功后会自动填充，也可手动粘贴查询" onchange="saveVideoConfig()">
+                        <button class="action-btn" onclick="queryVideoTaskByInput()">查询任务</button>
+                        <button class="action-btn" onclick="deleteVideoTask()">删除任务</button>
+                    </div>
+                </div>
+                <button id="generateVideoBtn" onclick="generateVideo()">开始生成视频</button>
+                <div class="result-area">
+                    <div class="input-group">
+                        <label>视频任务日志</label>
+                        <div id="videoLogConsole" class="log-panel"></div>
+                    </div>
+                    <div class="input-group">
+                        <label>任务状态</label>
+                        <div class="status-grid">
+                            <div class="status-card"><strong>当前状态</strong><span id="videoTaskStatus" class="status-badge">idle</span></div>
+                            <div class="status-card"><strong>任务 ID</strong><span id="videoTaskIdText">--</span></div>
+                            <div class="status-card"><strong>模型</strong><span id="videoTaskModel">--</span></div>
+                            <div class="status-card"><strong>更新时间</strong><span id="videoTaskUpdatedAt">--</span></div>
+                            <div class="status-card"><strong>视频链接</strong><a id="videoTaskUrl" href="" target="_blank" style="display:none;">打开视频</a><span id="videoTaskUrlPlaceholder">--</span></div>
+                            <div class="status-card"><strong>错误信息</strong><span id="videoTaskError">--</span></div>
+                        </div>
+                    </div>
+                    <div id="videoUrlDisplay" style="display:none; margin-top:10px; width:100%;">
+                        <label style="font-weight:600; font-size:0.9em; color:#555; display:block; margin-bottom:8px;">生成视频 URL</label>
+                        <div style="background:#f8f9fa; border:1px solid var(--border-color); border-radius:6px; padding:10px; word-break:break-all; font-size:12px; font-family:monospace; color:#333;">
+                            <a id="videoUrlLink" href="" target="_blank" style="color:var(--primary-color); text-decoration:none;"></a>
+                        </div>
+                        <button onclick="copyVideoUrl()" style="margin-top:8px; padding:8px 16px; font-size:14px; width:auto; background:#6c757d;">复制链接</button>
+                    </div>
+                    <div class="input-group">
+                        <label>视频结果</label>
+                        <div class="video-preview-box">
+                            <div class="loading-spinner" id="videoSpinner"></div>
+                            <span id="videoPlaceholderText" style="color:#999;">生成视频后会显示在这里</span>
+                            <video id="resultVideo" controls playsinline style="display:none;"></video>
+                            <img id="videoLastFrame" alt="视频尾帧" style="display:none;">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(tabNav);
+            container.appendChild(imageTab);
+            container.appendChild(videoTab);
         }
 
         // --- 图片URL显示相关 ---
@@ -1196,6 +1450,20 @@
                 }, 1500);
             }).catch(err => {
                 log("复制失败: " + err.message, 'error');
+            });
+        }
+
+        function copyVideoUrl() {
+            const url = document.getElementById('videoUrlLink').textContent;
+            if (!url) {
+                logVideo('没有可复制的视频链接', 'warn');
+                return;
+            }
+
+            navigator.clipboard.writeText(url).then(() => {
+                logVideo('视频链接已复制到剪贴板', 'success');
+            }).catch(err => {
+                logVideo(`复制失败: ${err.message}`, 'error');
             });
         }
 
@@ -1722,6 +1990,483 @@
 
         // --- 3. 核心请求逻辑 (支持多模态) ---
         let lastLogMessage = ''; // 为 AOD 模式保存最新日志
+
+        const VIDEO_API_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks';
+        const VIDEO_MODE_LIMITS = { text_only: 0, first_frame: 1, first_last_frame: 2, reference_images: 9 };
+        let videoReferenceImages = [];
+        let videoPollTimer = null;
+        let currentVideoTaskId = null;
+        let currentVideoStatus = 'idle';
+
+        function logVideo(msg, type = 'info') {
+            const consoleEl = document.getElementById('videoLogConsole');
+            if (!consoleEl) return;
+            const color = type === 'error' ? '#e74c3c' : (type === 'success' ? '#2ecc71' : (type === 'warn' ? '#f39c12' : '#00ff00'));
+            const line = document.createElement('div');
+            line.style.color = color;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            consoleEl.appendChild(line);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        function handlePaste(event) {
+            const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+            const files = [];
+            for (let index in items) {
+                const item = items[index];
+                if (item && item.kind === 'file' && item.type.startsWith('image/')) {
+                    files.push(item.getAsFile());
+                }
+            }
+
+            if (files.length === 0) return;
+
+            if (activeTab === 'video') {
+                logVideo('检测到剪贴板图片，正在加入视频参考图...', 'info');
+                processVideoFiles(files);
+                document.getElementById('videoDropZone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                log('检测到剪贴板图片，正在处理...', 'info');
+                processFiles(files);
+                document.getElementById('dropZone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function getVideoImageLimit() {
+            return VIDEO_MODE_LIMITS[document.getElementById('videoMode').value] ?? 0;
+        }
+
+        function getVideoRoleLabel(index) {
+            const mode = document.getElementById('videoMode').value;
+            if (mode === 'first_frame') return '首帧';
+            if (mode === 'first_last_frame') return index === 0 ? '首帧' : '尾帧';
+            if (mode === 'reference_images') return `参考图 ${index + 1}`;
+            return '';
+        }
+
+        function updateVideoModeUI() {
+            const mode = document.getElementById('videoMode').value;
+            const limit = getVideoImageLimit();
+            const title = document.getElementById('videoUploadTitle');
+            const desc = document.getElementById('videoUploadDesc');
+
+            if (limit === 0) {
+                videoReferenceImages = [];
+                title.textContent = '当前模式无需上传图片';
+                desc.textContent = '切换到图生视频模式后可上传';
+            } else if (mode === 'first_frame') {
+                videoReferenceImages = videoReferenceImages.slice(0, 1);
+                title.textContent = '上传 1 张首帧图片';
+                desc.textContent = '支持拖拽、粘贴或点击上传';
+            } else if (mode === 'first_last_frame') {
+                videoReferenceImages = videoReferenceImages.slice(0, 2);
+                title.textContent = '上传首帧和尾帧图片';
+                desc.textContent = '第 1 张为首帧，第 2 张为尾帧';
+            } else {
+                videoReferenceImages = videoReferenceImages.slice(0, limit);
+                title.textContent = '上传参考图片';
+                desc.textContent = '最多 9 张，建议提示词中用 [图1] [图2] 指代';
+            }
+
+            renderVideoPreviews();
+            saveVideoConfig();
+        }
+
+        function triggerVideoFileInput() {
+            if (getVideoImageLimit() === 0) {
+                logVideo('当前模式不需要上传图片', 'warn');
+                return;
+            }
+            document.getElementById('videoFileInput').click();
+        }
+
+        function handleVideoFileSelect(event) {
+            processVideoFiles(event.target.files);
+            event.target.value = '';
+        }
+
+        function fileToDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error(`读取文件失败: ${file.name || 'unknown'}`));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function processVideoFiles(files) {
+            const limit = getVideoImageLimit();
+            if (limit === 0) {
+                logVideo('当前模式不接受图片输入', 'warn');
+                return;
+            }
+
+            const remaining = limit - videoReferenceImages.length;
+            if (remaining <= 0) {
+                logVideo(`当前模式最多允许 ${limit} 张图片`, 'warn');
+                return;
+            }
+
+            const candidates = Array.from(files || []).filter(file => file && file.type && file.type.startsWith('image/'));
+            if (candidates.length === 0) {
+                logVideo('没有检测到可用图片文件', 'warn');
+                return;
+            }
+
+            if (candidates.length > remaining) {
+                logVideo(`超出上限，仅保留前 ${remaining} 张图片`, 'warn');
+            }
+
+            const accepted = candidates.slice(0, remaining);
+            try {
+                const results = await Promise.all(accepted.map(fileToDataUrl));
+                videoReferenceImages.push(...results);
+                renderVideoPreviews();
+                logVideo(`已添加 ${results.length} 张参考图片`, 'success');
+            } catch (error) {
+                logVideo(error.message, 'error');
+            }
+        }
+
+        function renderVideoPreviews() {
+            const grid = document.getElementById('videoPreviewGrid');
+            const placeholder = document.getElementById('videoUploadPlaceholder');
+            const badge = document.getElementById('videoImgCountBadge');
+            const limit = getVideoImageLimit();
+
+            if (!grid) return;
+
+            grid.innerHTML = '';
+            badge.innerText = `${videoReferenceImages.length} / ${limit}`;
+            placeholder.style.display = videoReferenceImages.length > 0 ? 'none' : 'block';
+
+            videoReferenceImages.forEach((base64, index) => {
+                const div = document.createElement('div');
+                div.className = 'thumb-item';
+                div.onclick = (e) => e.stopPropagation();
+
+                const img = document.createElement('img');
+                img.src = base64;
+
+                const role = document.createElement('div');
+                role.className = 'thumb-role';
+                role.textContent = getVideoRoleLabel(index);
+
+                const btn = document.createElement('button');
+                btn.className = 'thumb-remove';
+                btn.innerHTML = 'x';
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    videoReferenceImages.splice(index, 1);
+                    renderVideoPreviews();
+                    logVideo('已移除 1 张视频参考图', 'info');
+                };
+
+                div.appendChild(img);
+                if (role.textContent) div.appendChild(role);
+                div.appendChild(btn);
+                grid.appendChild(div);
+            });
+        }
+
+        function attachVideoDropZone() {
+            const videoDropZone = document.getElementById('videoDropZone');
+            if (!videoDropZone || videoDropZone.dataset.bound === 'true') return;
+            videoDropZone.dataset.bound = 'true';
+
+            videoDropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                videoDropZone.classList.add('dragover');
+            });
+            videoDropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                videoDropZone.classList.remove('dragover');
+            });
+            videoDropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                videoDropZone.classList.remove('dragover');
+                if (e.dataTransfer.files) processVideoFiles(e.dataTransfer.files);
+            });
+        }
+
+        function stopVideoPolling() {
+            if (videoPollTimer) {
+                clearTimeout(videoPollTimer);
+                videoPollTimer = null;
+            }
+        }
+
+        function scheduleVideoPolling(taskId, delay = 5000) {
+            stopVideoPolling();
+            videoPollTimer = setTimeout(() => queryVideoTask(taskId, true), delay);
+        }
+
+        function setVideoLoading(isLoading, placeholderText = '生成视频后会显示在这里') {
+            document.getElementById('videoSpinner').style.display = isLoading ? 'block' : 'none';
+            document.getElementById('videoPlaceholderText').style.display = isLoading ? 'block' : 'none';
+            document.getElementById('videoPlaceholderText').textContent = placeholderText;
+        }
+
+        function updateVideoStatusBadge(status) {
+            const badge = document.getElementById('videoTaskStatus');
+            badge.textContent = status || 'idle';
+            badge.className = 'status-badge';
+            if (status === 'succeeded') badge.classList.add('success');
+            else if (status === 'queued' || status === 'running') badge.classList.add('running');
+            else if (status && status !== 'idle') badge.classList.add('error');
+        }
+
+        function formatUnixTime(value) {
+            if (!value) return '--';
+            return new Date(value * 1000).toLocaleString('zh-CN');
+        }
+
+        function updateVideoTaskPanel(task = {}) {
+            updateVideoStatusBadge(task.status || 'idle');
+            document.getElementById('videoTaskIdText').textContent = task.id || '--';
+            document.getElementById('videoTaskModel').textContent = task.model || '--';
+            document.getElementById('videoTaskUpdatedAt').textContent = formatUnixTime(task.updated_at);
+            document.getElementById('videoTaskError').textContent = task.error?.message || '--';
+
+            const urlLink = document.getElementById('videoTaskUrl');
+            const urlPlaceholder = document.getElementById('videoTaskUrlPlaceholder');
+            const videoUrl = task.content?.video_url || '';
+            if (videoUrl) {
+                urlLink.href = videoUrl;
+                urlLink.style.display = 'inline';
+                urlPlaceholder.style.display = 'none';
+            } else {
+                urlLink.href = '';
+                urlLink.style.display = 'none';
+                urlPlaceholder.style.display = 'inline';
+                urlPlaceholder.textContent = '--';
+            }
+        }
+
+        function resetVideoPreview() {
+            const resultVideo = document.getElementById('resultVideo');
+            const lastFrame = document.getElementById('videoLastFrame');
+            resultVideo.pause();
+            resultVideo.removeAttribute('src');
+            resultVideo.load();
+            resultVideo.style.display = 'none';
+            lastFrame.removeAttribute('src');
+            lastFrame.style.display = 'none';
+            document.getElementById('videoUrlDisplay').style.display = 'none';
+            document.getElementById('videoTaskUrl').style.display = 'none';
+            document.getElementById('videoTaskUrlPlaceholder').style.display = 'inline';
+            document.getElementById('videoTaskUrlPlaceholder').textContent = '--';
+        }
+
+        function showVideoResult(task) {
+            const videoUrl = task.content?.video_url || '';
+            const lastFrameUrl = task.content?.last_frame_url || '';
+            const resultVideo = document.getElementById('resultVideo');
+            const lastFrame = document.getElementById('videoLastFrame');
+
+            if (videoUrl) {
+                document.getElementById('videoUrlDisplay').style.display = 'block';
+                document.getElementById('videoUrlLink').href = videoUrl;
+                document.getElementById('videoUrlLink').textContent = videoUrl;
+                resultVideo.src = videoUrl;
+                resultVideo.style.display = 'block';
+            }
+
+            if (lastFrameUrl) {
+                lastFrame.src = lastFrameUrl;
+                lastFrame.style.display = 'block';
+            }
+
+            if (!videoUrl && !lastFrameUrl) {
+                document.getElementById('videoPlaceholderText').style.display = 'block';
+                document.getElementById('videoPlaceholderText').textContent = '任务完成，但响应中未返回视频地址';
+            } else {
+                document.getElementById('videoPlaceholderText').style.display = 'none';
+            }
+        }
+
+        function buildVideoContent() {
+            const mode = document.getElementById('videoMode').value;
+            const prompt = document.getElementById('videoPrompt').value.trim();
+            const content = [];
+
+            if (prompt) content.push({ type: 'text', text: prompt });
+
+            if (mode === 'text_only') {
+                if (!prompt) throw new Error('文生视频必须填写提示词');
+                return content;
+            }
+
+            if (mode === 'first_frame') {
+                if (videoReferenceImages.length !== 1) throw new Error('首帧模式需要且只需要 1 张图片');
+                content.push({ type: 'image_url', role: 'first_frame', image_url: { url: videoReferenceImages[0] } });
+                return content;
+            }
+
+            if (mode === 'first_last_frame') {
+                if (videoReferenceImages.length !== 2) throw new Error('首尾帧模式需要 2 张图片');
+                content.push({ type: 'image_url', role: 'first_frame', image_url: { url: videoReferenceImages[0] } });
+                content.push({ type: 'image_url', role: 'last_frame', image_url: { url: videoReferenceImages[1] } });
+                return content;
+            }
+
+            if (mode === 'reference_images') {
+                if (videoReferenceImages.length < 1) throw new Error('参考图模式至少需要 1 张图片');
+                videoReferenceImages.forEach(url => {
+                    content.push({ type: 'image_url', role: 'reference_image', image_url: { url } });
+                });
+                return content;
+            }
+
+            throw new Error('未知的视频生成模式');
+        }
+
+        async function generateVideo() {
+            const apiKey = document.getElementById('videoApiKey').value.trim();
+            const model = document.getElementById('videoModel').value.trim();
+            const button = document.getElementById('generateVideoBtn');
+
+            if (!apiKey) return logVideo('请先填写 ARK API Key', 'error');
+            if (!model) return logVideo('请填写视频模型 ID', 'error');
+
+            let content;
+            try {
+                content = buildVideoContent();
+            } catch (error) {
+                logVideo(error.message, 'error');
+                return;
+            }
+
+            const payload = {
+                model,
+                content,
+                resolution: document.getElementById('videoResolution').value,
+                ratio: document.getElementById('videoRatio').value,
+                duration: parseInt(document.getElementById('videoDuration').value, 10),
+                seed: parseInt(document.getElementById('videoSeed').value, 10),
+                generate_audio: document.getElementById('videoGenerateAudio').checked,
+                return_last_frame: document.getElementById('videoReturnLastFrame').checked,
+                watermark: document.getElementById('videoWatermark').checked
+            };
+
+            saveVideoConfig();
+            button.disabled = true;
+            button.innerText = '提交中...';
+            resetVideoPreview();
+            setVideoLoading(true, '视频任务已提交，等待响应...');
+            updateVideoTaskPanel({ status: 'queued', model });
+
+            try {
+                const response = await fetch(VIDEO_API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error?.message || data.message || `HTTP ${response.status}`);
+                if (!data.id) throw new Error('接口未返回任务 ID');
+
+                currentVideoTaskId = data.id;
+                currentVideoStatus = 'queued';
+                document.getElementById('videoTaskId').value = data.id;
+                saveVideoConfig();
+                updateVideoTaskPanel({ id: data.id, status: 'queued', model });
+                logVideo(`任务已创建: ${data.id}`, 'success');
+                scheduleVideoPolling(data.id, 2000);
+            } catch (error) {
+                setVideoLoading(false, '生成视频后会显示在这里');
+                updateVideoTaskPanel({ status: 'failed', error: { message: error.message } });
+                logVideo(`创建任务失败: ${error.message}`, 'error');
+            } finally {
+                button.disabled = false;
+                button.innerText = '开始生成视频';
+            }
+        }
+
+        async function queryVideoTaskByInput() {
+            const taskId = document.getElementById('videoTaskId').value.trim();
+            if (!taskId) return logVideo('请先输入任务 ID', 'warn');
+            saveVideoConfig();
+            await queryVideoTask(taskId, false);
+        }
+
+        async function queryVideoTask(taskId, silent = false) {
+            const apiKey = document.getElementById('videoApiKey').value.trim();
+            if (!apiKey) return logVideo('请先填写 ARK API Key', 'error');
+
+            try {
+                const response = await fetch(`${VIDEO_API_ENDPOINT}/${encodeURIComponent(taskId)}`, {
+                    headers: { 'Authorization': `Bearer ${apiKey}` }
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error?.message || data.message || `HTTP ${response.status}`);
+
+                currentVideoTaskId = data.id || taskId;
+                document.getElementById('videoTaskId').value = currentVideoTaskId;
+                saveVideoConfig();
+                updateVideoTaskPanel(data);
+
+                if (data.status !== currentVideoStatus || !silent) {
+                    logVideo(`任务 ${currentVideoTaskId} 状态: ${data.status}`, data.status === 'failed' ? 'error' : 'info');
+                }
+                currentVideoStatus = data.status;
+
+                if (data.status === 'queued' || data.status === 'running') {
+                    setVideoLoading(true, `任务状态: ${data.status}，正在等待结果...`);
+                    scheduleVideoPolling(currentVideoTaskId);
+                    return;
+                }
+
+                stopVideoPolling();
+                setVideoLoading(false);
+
+                if (data.status === 'succeeded') {
+                    showVideoResult(data);
+                    logVideo('视频生成完成', 'success');
+                } else {
+                    logVideo(`任务结束: ${data.error?.message || data.status}`, 'error');
+                }
+            } catch (error) {
+                if (!silent) {
+                    logVideo(`查询任务失败: ${error.message}`, 'error');
+                    setVideoLoading(false, '生成视频后会显示在这里');
+                } else {
+                    scheduleVideoPolling(taskId, 8000);
+                }
+            }
+        }
+
+        async function deleteVideoTask() {
+            const apiKey = document.getElementById('videoApiKey').value.trim();
+            const taskId = document.getElementById('videoTaskId').value.trim();
+
+            if (!apiKey) return logVideo('请先填写 ARK API Key', 'error');
+            if (!taskId) return logVideo('请先输入任务 ID', 'warn');
+            if (!confirm(`确认删除或取消任务 ${taskId} 吗？`)) return;
+
+            try {
+                const response = await fetch(`${VIDEO_API_ENDPOINT}/${encodeURIComponent(taskId)}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${apiKey}` }
+                });
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(text || `HTTP ${response.status}`);
+                }
+
+                stopVideoPolling();
+                currentVideoStatus = 'idle';
+                updateVideoTaskPanel({ status: 'idle' });
+                resetVideoPreview();
+                logVideo(`任务 ${taskId} 已执行删除或取消请求`, 'success');
+            } catch (error) {
+                logVideo(`删除任务失败: ${error.message}`, 'error');
+            }
+        }
 
         function log(msg, type = 'info') {
             const consoleEl = document.getElementById('logConsole');
