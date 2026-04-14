@@ -1171,7 +1171,7 @@
             document.getElementById('apiKey').value = localStorage.getItem(CONFIG_KEYS.API_KEY) || '';
             document.getElementById('modelName').value = localStorage.getItem(CONFIG_KEYS.MODEL) || 'gemini-3-pro-image-preview-4k';
             document.getElementById('prompt').value = localStorage.getItem(CONFIG_KEYS.PROMPT) || '';
-            document.getElementById('videoApiKey').value = localStorage.getItem(CONFIG_KEYS.VIDEO_API_KEY) || localStorage.getItem(CONFIG_KEYS.API_KEY) || '';
+            document.getElementById('videoApiKey').value = localStorage.getItem(CONFIG_KEYS.VIDEO_API_KEY) || '';
             document.getElementById('videoModel').value = localStorage.getItem(CONFIG_KEYS.VIDEO_MODEL) || 'doubao-seedance-1-5-pro-251215';
             document.getElementById('videoPrompt').value = localStorage.getItem(CONFIG_KEYS.VIDEO_PROMPT) || '';
             document.getElementById('videoMode').value = localStorage.getItem(CONFIG_KEYS.VIDEO_MODE) || 'text_only';
@@ -1289,7 +1289,7 @@
             videoTab.id = 'videoTab';
             videoTab.className = 'tab-panel';
             videoTab.innerHTML = `
-                <p class="section-hint">调用火山方舟异步视频任务接口。当前页面支持文生视频、图生视频首帧、首尾帧和参考图模式，暂未接入参考视频和参考音频上传。</p>
+                <p class="section-hint">调用火山方舟异步视频任务接口。视频 API Key 独立保存，不与图片生成配置共用。当前页面支持文生视频、图生视频首帧、首尾帧和参考图模式，暂未接入参考视频和参考音频上传。</p>
                 <div class="config-section">
                     <div class="input-group">
                         <label for="videoEndpoint">视频 API Endpoint</label>
