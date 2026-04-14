@@ -1172,7 +1172,7 @@
             document.getElementById('modelName').value = localStorage.getItem(CONFIG_KEYS.MODEL) || 'gemini-3-pro-image-preview-4k';
             document.getElementById('prompt').value = localStorage.getItem(CONFIG_KEYS.PROMPT) || '';
             document.getElementById('videoApiKey').value = localStorage.getItem(CONFIG_KEYS.VIDEO_API_KEY) || '';
-            document.getElementById('videoModel').value = localStorage.getItem(CONFIG_KEYS.VIDEO_MODEL) || 'doubao-seedance-1-5-pro-251215';
+            document.getElementById('videoModel').value = localStorage.getItem(CONFIG_KEYS.VIDEO_MODEL) || 'doubao-seedance-2-0-260128';
             document.getElementById('videoPrompt').value = localStorage.getItem(CONFIG_KEYS.VIDEO_PROMPT) || '';
             document.getElementById('videoMode').value = localStorage.getItem(CONFIG_KEYS.VIDEO_MODE) || 'text_only';
             document.getElementById('videoResolution').value = localStorage.getItem(CONFIG_KEYS.VIDEO_RESOLUTION) || '720p';
@@ -1301,7 +1301,7 @@
                     </div>
                     <div class="input-group full-width">
                         <label for="videoModel">视频模型 ID</label>
-                        <input type="text" id="videoModel" placeholder="例如: doubao-seedance-1-5-pro-251215" onchange="saveVideoConfig()">
+                        <input type="text" id="videoModel" placeholder="例如: doubao-seedance-2-0-260128" onchange="saveVideoConfig()">
                     </div>
                 </div>
                 <div class="option-grid">
