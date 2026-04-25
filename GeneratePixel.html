@@ -930,7 +930,7 @@
         <div class="config-section">
             <div class="input-group">
                 <label for="baseUrl">API Base URL</label>
-                <input type="text" id="baseUrl" placeholder="例如: https://521api.com" onchange="saveConfig()">
+                <input type="text" id="baseUrl" placeholder="例如: https://gaccodeapi.com" onchange="saveConfig()">
             </div>
             <div class="input-group">
                 <label for="apiKey">API Key (sk-...)</label>
@@ -1167,7 +1167,7 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             setupTabsAndVideoUI();
-            document.getElementById('baseUrl').value = localStorage.getItem(CONFIG_KEYS.BASE_URL) || 'https://521api.com';
+            document.getElementById('baseUrl').value = localStorage.getItem(CONFIG_KEYS.BASE_URL) || 'https://gaccodeapi.com';
             document.getElementById('apiKey').value = localStorage.getItem(CONFIG_KEYS.API_KEY) || '';
             document.getElementById('modelName').value = localStorage.getItem(CONFIG_KEYS.MODEL) || 'gemini-3-pro-image-preview-4k';
             document.getElementById('prompt').value = localStorage.getItem(CONFIG_KEYS.PROMPT) || '';
@@ -2703,6 +2703,20 @@
                         }
                         // ---------------------
                     }
+                }
+
+                // New API 在配置异常或误访问时会返回 _type: newapi_channel_conn，并非生图结果
+                if (data && data._type === 'newapi_channel_conn') {
+                    log("❌ 收到通道连接信息 (newapi_channel_conn)，不是生图成功响应。", 'error');
+                    log("说明：在浏览器里直接打开 Base URL 根地址可能只看到这类 JSON，请使用本页「开始生成」向 /v1/images/generations 发 POST。若点生成后仍出现，请到 API 控制台检查该 Key 是否已绑定通道、模型 gpt-image-2-4K 是否已启用/有余额。", 'warn');
+                    phText.innerText = "未得到图片，返回为通道元数据，请见上方日志";
+                    phText.style.display = 'block';
+                    spinner.style.display = 'none';
+                    btn.disabled = false;
+                    btn.innerText = "🚀 开始生成图片";
+                    const aodV = document.getElementById('aodBlackVideo');
+                    if (aodV && aodV.style.display !== 'none') exitAODMode();
+                    return;
                 }
 
                 if (finalImageUrl) {
