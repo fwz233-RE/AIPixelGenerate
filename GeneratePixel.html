@@ -938,7 +938,7 @@
             </div>
             <div class="input-group full-width">
                 <label for="modelName">模型名称 (Model)</label>
-                <input type="text" id="modelName" placeholder="例如: gemini-3-pro-image-preview-4k"
+                <input type="text" id="modelName" placeholder="例如: gpt-image-2-4K"
                     onchange="saveConfig()">
             </div>
         </div>
@@ -1169,7 +1169,7 @@
             setupTabsAndVideoUI();
             document.getElementById('baseUrl').value = localStorage.getItem(CONFIG_KEYS.BASE_URL) || 'https://gaccodeapi.com';
             document.getElementById('apiKey').value = localStorage.getItem(CONFIG_KEYS.API_KEY) || '';
-            document.getElementById('modelName').value = localStorage.getItem(CONFIG_KEYS.MODEL) || 'gemini-3-pro-image-preview-4k';
+            document.getElementById('modelName').value = localStorage.getItem(CONFIG_KEYS.MODEL) || 'gpt-image-2-4K';
             document.getElementById('prompt').value = localStorage.getItem(CONFIG_KEYS.PROMPT) || '';
             document.getElementById('videoApiKey').value = localStorage.getItem(CONFIG_KEYS.VIDEO_API_KEY) || '';
             document.getElementById('videoModel').value = localStorage.getItem(CONFIG_KEYS.VIDEO_MODEL) || 'doubao-seedance-2-0-260128';
@@ -1188,6 +1188,9 @@
             setActiveTab(localStorage.getItem(CONFIG_KEYS.ACTIVE_TAB) || 'image');
             log("系统就绪，配置已加载。");
             logVideo("视频页已就绪。");
+            if (location.protocol === 'file:') {
+                log('提示：当前为本地文件 (file://) 打开。若生成时报错 Failed to fetch 或长时间无响应，请用本地 HTTP 访问本页（如 VS Code Live Server、或在本目录执行 npx http-server -p 8080）。', 'warn');
+            }
 
             // 注册全局粘贴事件监听器
             document.addEventListener('paste', handlePaste);
@@ -2576,6 +2579,17 @@
             lastLogMessage = msg;
         }
 
+        function pickImageGenSize(modelName) {
+            const m = (modelName || '').toLowerCase();
+            if (m.includes('gpt-image-2') || (m.includes('gpt-image') && m.includes('4k')))
+                return '3840x2160';
+            return '1024x1024';
+        }
+
+        function shouldAddGptImageQuality(modelName) {
+            return (modelName || '').toLowerCase().includes('gpt-image');
+        }
+
         async function generateImage() {
             const baseUrl = document.getElementById('baseUrl').value.replace(/\/+$/, "");
             const apiKey = document.getElementById('apiKey').value.trim();
@@ -2584,6 +2598,8 @@
 
             if (!apiKey) return log("请先填写 API Key", 'error');
             if (!prompt) return log("请填写提示词", 'error');
+            if (/gpt-image|4k/i.test(model))
+                log('高清 / 4K 出图可能需 1～2 分钟，请留意下方日志，勿重复狂点。', 'warn');
 
             // --- iOS Audio Fix: Unlock SpeechSynthesis with silent utterance on user interaction ---
             if ('speechSynthesis' in window) {
@@ -2643,12 +2659,17 @@
                     // Mode B: 标准 Image Gen (纯文)
                     log("使用标准 Image Generations 模式...");
                     url = `${baseUrl}/v1/images/generations`;
+                    const imgSize = pickImageGenSize(model);
                     payload = {
                         model: model,
                         prompt: prompt,
                         n: 1,
-                        size: "1024x1024"
+                        size: imgSize
                     };
+                    if (shouldAddGptImageQuality(model))
+                        payload.quality = 'high';
+                    if (/gpt-image|4k/i.test(model))
+                        log(`请求尺寸: ${imgSize}` + (payload.quality ? `，quality: ${payload.quality}` : ''), 'info');
                 }
 
                 log(`发送 POST 请求...`);
@@ -2668,10 +2689,21 @@
                     body: JSON.stringify(payload)
                 });
 
-                const data = await response.json();
+                const rawText = await response.text();
+                let data = {};
+                try {
+                    data = rawText ? JSON.parse(rawText) : {};
+                } catch (parseErr) {
+                    log(`API 返回非 JSON（HTTP ${response.status}），前 800 字符：${rawText.slice(0, 800)}`, 'error');
+                    throw new Error('无法解析 API 响应为 JSON，请确认 Base URL 指向正确的兼容接口');
+                }
 
                 if (!response.ok) {
                     log("API 返回错误信息: " + JSON.stringify(data), 'error');
+                    const errMsg = data.error?.message != null ? String(data.error.message) : '';
+                    if (errMsg.includes('没有可用token')) {
+                        log('说明：这表示该 Key 在「当前通道/账户」下没有可用额度或配额（不是 sk 写错，而是余额、套餐或生图用量已用尽）。请登录 API 管理后台查余额/充值/套餐，或确认该模型在账户内是否可计费。', 'warn');
+                    }
                     throw new Error(data.error?.message || `HTTP ${response.status}`);
                 }
 
@@ -2679,7 +2711,13 @@
 
                 // 解析响应
                 if (data.data && data.data[0]?.url) {
-                    finalImageUrl = data.data[0].url; // 标准 Image 接口
+                    let u = data.data[0].url;
+                    if (typeof u === 'string' && u.startsWith('/') && !u.startsWith('//'))
+                        u = baseUrl + u;
+                    finalImageUrl = u;
+                } else if (data.data && data.data[0]?.b64_json) {
+                    finalImageUrl = 'data:image/png;base64,' + data.data[0].b64_json;
+                    log('已使用接口返回的 base64 图片数据', 'info');
                 } else if (data.choices && data.choices[0]?.message?.content) {
                     // Chat 接口
                     const content = data.choices[0].message.content;
@@ -2703,6 +2741,13 @@
                         }
                         // ---------------------
                     }
+                }
+
+                if (!finalImageUrl && !(data && data._type === 'newapi_channel_conn')) {
+                    const top = data && typeof data === 'object' ? Object.keys(data).join(', ') : '(无)';
+                    log(`未从响应中解析出图片 URL/base64，顶层字段: ${top}`, 'warn');
+                    if (data && Array.isArray(data.data) && data.data[0] && typeof data.data[0] === 'object')
+                        log(`data[0] 字段: ${Object.keys(data.data[0]).join(', ')}`, 'warn');
                 }
 
                 // New API 在配置异常或误访问时会返回 _type: newapi_channel_conn，并非生图结果
