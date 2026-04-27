@@ -2711,12 +2711,13 @@
         }
 
         /**
-         * /v1/images/edits 的 size 与 generations 的枚举不完全相同（见 API 文档），参考图生图在文档中多为 auto 或 1024/1536 档位。
+         * /v1/images/edits：OpenAI 文档中 size 为 1024x1024、1536x1024、1024x1536、auto；quality 为 high/medium/low/auto。
+         * 最高像素常用 1536x1024 或 1024x1536（同档总像素）。部分中转对 size=auto 支持差，gpt-image-2/4K 用显式长边 1536 横版。
          */
         function pickImageEditSize(modelName) {
             const m = (modelName || '').toLowerCase();
             if (m.includes('dall-e-2')) return '1024x1024';
-            if (m.includes('gpt-image-2') || (m.includes('gpt-image') && m.includes('4k'))) return 'auto';
+            if (m.includes('gpt-image-2') || (m.includes('gpt-image') && m.includes('4k'))) return '1536x1024';
             if (m.includes('gpt-image')) return '1024x1024';
             return '1024x1024';
         }
@@ -2732,6 +2733,11 @@
             if (m.includes('gpt-image-2')) return;
             if (m.includes('gpt-image-1.5') || (m.includes('gpt-image-1') && !m.includes('mini')))
                 payload.input_fidelity = 'high';
+        }
+
+        /** GPT 图模 Edits 可传 moderation: low，部分通道上弱于 auto，或减轻误拒（以接口为准）。 */
+        function applyModerationForImageEdits(modelName, payload) {
+            if ((modelName || '').toLowerCase().includes('gpt-image')) payload.moderation = 'low';
         }
 
         function dataUrlToBlob(dataUrl) {
@@ -2765,6 +2771,7 @@
             if (editPayload.quality != null) fd.append('quality', String(editPayload.quality));
             if (editPayload.output_format) fd.append('output_format', editPayload.output_format);
             if (editPayload.input_fidelity) fd.append('input_fidelity', editPayload.input_fidelity);
+            if (editPayload.moderation) fd.append('moderation', editPayload.moderation);
             referenceDataUrls.forEach((u, i) => {
                 fd.append('image[]', dataUrlToBlob(u), dataUrlToFileName(u, i));
             });
@@ -2960,17 +2967,19 @@
                         log(`使用 Image Edits 参考图生图 (共 ${referenceImages.length} 张)，固定最高画质...`);
                         url = `${baseUrl}/v1/images/edits`;
                         const imgSize = pickImageEditSize(model);
-                        const refPrompt = prompt + "\n\n(Generate a single new image that matches the description above, using the provided reference image(s) as guidance for style, layout, and content.)";
+                        const refPrompt = prompt.trim() + "\n\n请根据参考图与上文描述生成一张新图。";
                         const editPayload = {
                             n: 1,
                             size: imgSize
                         };
                         applyImageGenerationsQualityAndFormat(model, editPayload);
                         applyInputFidelityForImageEdits(model, editPayload);
+                        applyModerationForImageEdits(model, editPayload);
                         if (/gpt-image|4k|dall-e/i.test(model)) {
                             const ext = editPayload.output_format ? `，output_format: ${editPayload.output_format}` : '';
                             const inf = editPayload.input_fidelity ? `，input_fidelity: ${editPayload.input_fidelity}` : '';
-                            log(`参考图 — multipart，size: ${imgSize}` + (editPayload.quality != null ? `，quality: ${editPayload.quality}` : '') + ext + inf, 'info');
+                            const mod = editPayload.moderation ? `，moderation: ${editPayload.moderation}` : '';
+                            log(`参考图 — multipart，OpenAI 文档式最高档: size=${imgSize}，quality=${editPayload.quality || '—'}${ext}${inf}${mod}`, 'info');
                         }
                         fetchInit.body = buildImageEditsFormData(model, refPrompt, referenceImages, editPayload);
                         fetchInit.headers = { 'Authorization': `Bearer ${apiKey}` };
@@ -3035,6 +3044,9 @@
                     const errMsg = data.error?.message != null ? String(data.error.message) : '';
                     if (errMsg.includes('没有可用token')) {
                         log('说明：这表示该 Key 在「当前通道/账户」下没有可用额度或配额（不是 sk 写错，而是余额、套餐或生图用量已用尽）。请登录 API 管理后台查余额/充值/套餐，或确认该模型在账户内是否可计费。', 'warn');
+                    }
+                    if (errMsg.includes('没有按照预期生成图片') || errMsg.includes('重新调整提示词')) {
+                        log('说明：参考图模式已发 quality=high、output_format=png 与显式 size（见成功请求前一条 info）。此类报错多来自上游未产出图/内容审核/模型不稳定。可改短、写具体提示，换参考图，或把 traceid 交给通道方排查。', 'warn');
                     }
                     throw new Error(data.error?.message || `HTTP ${response.status}`);
                 }
