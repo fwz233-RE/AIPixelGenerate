@@ -1453,33 +1453,87 @@
             return resultImageObjectUrl;
         }
 
-        /** 将 data:URL 拆成二进制结果，避免拼接超长 data: 字符串 */
+        /** 纯 data:URL 整段解析（须以 data: 开头） */
         function parseDataUrlToB64Payload(dataUrl) {
             if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return null;
-            const comma = dataUrl.indexOf(',');
-            if (comma < 0) return null;
-            const header = dataUrl.slice(5, comma);
-            const mime = (header.split(';')[0] || 'image/png').trim() || 'image/png';
-            const body = dataUrl.slice(comma + 1);
-            if (!/;base64/i.test(header)) return null;
+            const b64Marker = ';base64,';
+            const semi = dataUrl.indexOf(b64Marker);
+            if (semi < 0) return null;
+            const mimePart = dataUrl.slice(5, semi);
+            const mime = (mimePart.split(';')[0] || 'image/png').trim() || 'image/png';
+            const body = dataUrl.slice(semi + b64Marker.length);
             return { base64: normalizeBase64String(body), mime };
         }
 
-        /** 从模型返回的正文里扫描 data:image...;base64, 段（不依赖正则吞全长） */
+        /**
+         * 从正文提取内嵌图：支持 ![alt](data:image/...;base64,...)（与 图.txt 一致）及裸 data:URL。
+         * 用 ;base64, 与结束括号/引号定位 payload，避免正则或逐字符扫描超长串。
+         */
         function extractInlineImageFromText(text) {
             if (typeof text !== 'string') return null;
             const di = text.indexOf('data:image');
             if (di < 0) return null;
-            const comma = text.indexOf(',', di);
-            if (comma < 0) return null;
-            const headerPart = text.slice(di + 5, comma);
-            if (!/;base64/i.test(headerPart)) return null;
-            const mime = (headerPart.split(';')[0] || 'image/png').trim() || 'image/png';
-            let j = comma + 1;
-            while (j < text.length && /[A-Za-z0-9+/=\s]/.test(text[j])) j++;
-            const b64 = normalizeBase64String(text.slice(comma + 1, j));
+            const b64Marker = ';base64,';
+            const semi = text.indexOf(b64Marker, di);
+            if (semi < 0) return null;
+            const mimePart = text.slice(di + 5, semi);
+            const mime = (mimePart.split(';')[0] || 'image/png').trim() || 'image/png';
+            const payloadStart = semi + b64Marker.length;
+            let end = text.length;
+            const closeParen = text.indexOf(')', payloadStart);
+            if (closeParen >= payloadStart) end = closeParen;
+            const b64 = normalizeBase64String(text.slice(payloadStart, end));
             if (b64.length < 80) return null;
             return { kind: 'b64', base64: b64, mime };
+        }
+
+        /** 日志中去掉 data URL 正文（索引截取，不用正则匹配百万字符） */
+        function stripDataUrlsForLog(str) {
+            if (typeof str !== 'string' || str.length < 24) return str;
+            const b64Marker = ';base64,';
+            let out = '';
+            let i = 0;
+            while (i < str.length) {
+                const di = str.indexOf('data:image', i);
+                if (di < 0) {
+                    out += str.slice(i);
+                    break;
+                }
+                out += str.slice(i, di);
+                const semi = str.indexOf(b64Marker, di);
+                if (semi < 0) {
+                    out += '[data:image 片段已截断]';
+                    break;
+                }
+                let e = str.length;
+                const p0 = semi + b64Marker.length;
+                const closeParen = str.indexOf(')', p0);
+                if (closeParen >= p0) e = closeParen;
+                const approxKb = Math.round((e - p0) * 0.75 / 1024);
+                out += '[data:image;base64 已省略，约 ' + approxKb + ' KB]';
+                i = e;
+            }
+            return out;
+        }
+
+        function deepExtractInlineImage(node, depth) {
+            if (depth > 10) return null;
+            if (typeof node === 'string') return extractInlineImageFromText(node);
+            if (Array.isArray(node)) {
+                for (let k = 0; k < node.length; k++) {
+                    const r = deepExtractInlineImage(node[k], depth + 1);
+                    if (r) return r;
+                }
+                return null;
+            }
+            if (node && typeof node === 'object') {
+                const keys = Object.keys(node);
+                for (let k = 0; k < keys.length; k++) {
+                    const r = deepExtractInlineImage(node[keys[k]], depth + 1);
+                    if (r) return r;
+                }
+            }
+            return null;
         }
 
         function truncateUrlForLabel(url, maxLen) {
@@ -2638,6 +2692,8 @@
         }
 
         function log(msg, type = 'info') {
+            if (typeof msg === 'string' && msg.indexOf('data:image') >= 0 && msg.indexOf('base64,') >= 0)
+                msg = stripDataUrlsForLog(msg);
             const consoleEl = document.getElementById('logConsole');
             const color = type === 'error' ? '#e74c3c' : (type === 'success' ? '#2ecc71' : (type === 'warn' ? '#f39c12' : '#00ff00'));
             consoleEl.innerHTML += `<div style="color:${color}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
@@ -2677,6 +2733,8 @@
             const urlStringToResult = (raw) => {
                 if (typeof raw !== 'string' || !raw.trim()) return null;
                 const u = raw.trim();
+                const fromMd = extractInlineImageFromText(u);
+                if (fromMd) return fromMd;
                 const inline = parseDataUrlToB64Payload(u);
                 if (inline) return { kind: 'b64', base64: inline.base64, mime: inline.mime };
                 const resolved = resolveMaybeRelativeImageUrl(u, baseUrl);
@@ -2729,21 +2787,35 @@
                     if (mdMatch) return urlStringToResult(mdMatch[1]);
                     if (urlMatch) return urlStringToResult(urlMatch[1]);
                 } else if (Array.isArray(msg.content)) {
-                    for (const part of msg.content) {
+                    for (let pi = 0; pi < msg.content.length; pi++) {
+                        const part = msg.content[pi];
                         got = fromItem(part);
                         if (got) return got;
                         if (part && part.image_url && part.image_url.url)
                             got = urlStringToResult(String(part.image_url.url));
                         if (got) return got;
+                        const texts = [];
+                        if (part && typeof part.text === 'string') texts.push(part.text);
+                        if (part && typeof part.content === 'string') texts.push(part.content);
+                        for (let ti = 0; ti < texts.length; ti++) {
+                            got = extractInlineImageFromText(texts[ti]);
+                            if (got) return got;
+                            got = urlStringToResult(texts[ti]);
+                            if (got) return got;
+                        }
                     }
                 }
+            }
+            if (data.choices && data.choices[0]) {
+                got = deepExtractInlineImage(data.choices[0], 0);
+                if (got) return got;
             }
             return null;
         }
 
         function sanitizeForLog(str, maxLen) {
             if (typeof str !== 'string') return str;
-            let s = str.replace(/data:image\/[\w+.-]+;base64,[A-Za-z0-9+/=\s]+/gi, '[data:image;base64 已省略]');
+            let s = stripDataUrlsForLog(str);
             s = s.replace(/("b64_json"\s*:\s*")([A-Za-z0-9+/=]{120,})(")/gi, '$1[已省略]$3');
             if (s.length > maxLen) s = s.slice(0, maxLen) + '…';
             return s;
@@ -2896,6 +2968,9 @@
                         phText.style.display = 'block';
                         const aodVideo = document.getElementById('aodBlackVideo');
                         if (aodVideo && aodVideo.style.display !== 'none') exitAODMode();
+                    } else if (Array.isArray(content)) {
+                        const types = content.map(function (p) { return (p && p.type) ? p.type : '?'; }).join(', ');
+                        log('❌ 未解析到图片；message.content 为数组，各段 type: ' + types, 'warn');
                     }
                 }
 
